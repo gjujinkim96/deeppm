@@ -150,6 +150,9 @@ class Instruction:
         num_children = [child.num for child in self.children]
         print(num_parents, num_children)
 
+    def __repr__(self):
+        return str(self)
+    
     def __str__(self):
         return self.intel
 
@@ -243,6 +246,9 @@ class BasicBlock:
     def __init__(self, instrs):
         self.instrs = instrs
         self.span_values = [0] * len(self.instrs)
+
+    def __repr__(self):
+        return '\n'.join(map(str, self.instrs))
 
     def num_instrs(self):
         return len(self.instrs)

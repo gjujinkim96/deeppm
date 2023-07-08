@@ -46,7 +46,7 @@ class Data(object):
         size = len(self.data)
         split = (size * self.percentage) // 100
         self.train  = self.data[:split]
-        self.test = self.data[(split + 1):]
+        self.test = self.data[split:]
         print ('train ' + str(len(self.train)) + ' test ' + str(len(self.test)))
 
 

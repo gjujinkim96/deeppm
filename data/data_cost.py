@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.autograd as autograd
 import torch.optim as optim
 import torch
+import torch.nn.functional as F
 from tqdm import tqdm
 from .data import Data
 import matplotlib.pyplot as plt
@@ -19,12 +20,15 @@ import utilities as ut
 
 
 class DataItem:
-
-    def __init__(self, x, y, block, code_id):
-        self.x = x
+    def __init__(self, x, y, block, code_id, pad_idx):
+        max_len = max(len(elem) for elem in x)
+        self.x = torch.stack([F.pad(torch.tensor(elem), (0, max_len-len(elem)), value=pad_idx) for elem in x])
         self.y = y
         self.block = block
         self.code_id = code_id
+
+    def __repr__(self):
+        return f'---- Block ----\n{self.block}\nX Size: {self.x.size()}  Y: {self.y}'
 
 class DataInstructionEmbedding(Data):
 
@@ -49,6 +53,8 @@ class DataInstructionEmbedding(Data):
                 self.token_to_hot_idx[elem] = len(self.token_to_hot_idx)
                 self.hot_idx_to_token[self.token_to_hot_idx[elem]] = elem
             return self.token_to_hot_idx[elem]
+        
+        pad_idx = hot_idxify('<PAD>')
 
         if progress:
             iterator = tqdm(self.raw_data)
@@ -112,7 +118,7 @@ class DataInstructionEmbedding(Data):
 
             block = ut.BasicBlock(instrs)
             block.create_dependencies()
-            datum = DataItem(raw_instrs, timing, block, code_id)
+            datum = DataItem(raw_instrs, timing, block, code_id, pad_idx)
             self.data.append(datum)
 
 def load_dataset(data_savefile=None, arch=None, format='text'):
