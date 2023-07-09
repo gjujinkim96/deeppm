@@ -5,7 +5,7 @@
 import os
 import json
 from typing import NamedTuple
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 import torch
 import torch.nn as nn
@@ -13,6 +13,7 @@ import torch.optim as optim
 import time
 import losses as ls
 import random
+from torch.utils.data import DataLoader
 
 class Config(NamedTuple):
     """ Hyperparameters for training """
@@ -132,10 +133,10 @@ class LossReporter(object):
 
 class Trainer(object):
     """ Training Helper Class """
-    def __init__(self, cfg, model, data, expt, optimizer, device):
+    def __init__(self, cfg, model, ds, expt, optimizer, device):
         self.cfg = cfg # config for training : see class Config
         self.model = model
-        self.data = data
+        self.train_ds, self.test_ds = ds
         self.expt = expt
         self.lr = cfg.lr
         #self.dim = 756
@@ -149,7 +150,7 @@ class Trainer(object):
         self.device = device # device name
 
         self.loss_fn = ls.mse_loss
-        self.loss_reporter = LossReporter(expt, len(self.data.train))
+        self.loss_reporter = LossReporter(expt, len(self.train_ds))
 
         self.tolerance = 25.
 
@@ -164,6 +165,11 @@ class Trainer(object):
         if percentage < self.tolerance:
             self.correct += 1
 
+    def torch_correct_regression(self, x, y):
+        percentage = torch.abs(x - y) * 100.0 / (y + 1e-3)
+        return sum(percentage < self.tolerance)
+
+
     def print_final(self, f, x, y):
         
         if x.shape != ():
@@ -175,52 +181,53 @@ class Trainer(object):
             f.write('%f,%f\n' % (x,y))
 
     def validate(self, resultfile):
-        
         f = open(resultfile,'w')
 
-        self.correct = 0
-        average_loss = 0.
-        actual = []
-        predicted = []
+        self.model.eval()
+        self.model.to(self.device)
 
-        for j , item in enumerate(tqdm(self.data.test)):
+        correct = 0
+        total_losses = []
+        with torch.no_grad():
+            loader = DataLoader(self.test_ds, shuffle=False, num_workers=2,
+                        batch_size=self.cfg.batch_size, collate_fn=self.test_ds.block_collate_fn)
+            for x, target in tqdm(loader):
+                x = x.to(self.device) # TODO: is it required?, I don't know
+                target = target.to(self.device, dtype=torch.float32)
+                 
 
-            output = self.model(item)
-            target = torch.FloatTensor([item.y]).squeeze()
+                output = self.model(x)
 
-            output = output.to('cpu')
-            actual.append(target.data.numpy().tolist())
-            predicted.append(output.data.numpy().tolist())
+                # self.print_final(f, output, target) # TODO: what is this?
+                correct += self.torch_correct_regression(output, target)
 
-            self.print_final(f, output, target)
-            loss = self.loss_fn(output,target)
-            average_loss = (average_loss * j + loss.item()) / (j+1)
-            self.correct_regression(output, target)
+                loss = self.loss_fn(output, target)
+                total_losses.append(loss)
 
-        f.write('loss - %f\n' % (average_loss))
-        f.write('%f, %f\n'%(self.correct, len(self.data.test)))
 
+        f.write(f'loss - {sum(total_losses)/len(total_losses)}\n')
+        f.write(f'{correct}, {len(self.test_ds)}\n')
+        print(f'Validate: loss - {sum(total_losses)/len(total_losses)}\n\t{correct}/{len(self.test_ds)}\n')
         f.close()
 
     def train(self):
         """ Train Loop """
-    
+        resultfile = os.path.join(self.expt.experiment_root_path(), 'validation_results.txt')
 
+        self.model.train()
+        self.model.to(self.device)
+
+        loader = DataLoader(self.train_ds, shuffle=True, num_workers=4,
+                        batch_size=self.cfg.batch_size, collate_fn=self.train_ds.block_collate_fn)
+        
+        warm_up = int((len(self.train_ds) * 0.3))
 
         for epoch_no in range(self.cfg.n_epochs):
-
             epoch_loss_sum = 0.
             step = 0
             self.loss_reporter.start_epoch(epoch_no + 1) 
 
-            random.seed()
-            random.shuffle(self.data.train)
-
-            if epoch_no == 0:
-                warm_up = int((len(self.data.train) * 0.3))
-
-            for idx in range( 0, len(self.data.train), self.cfg.batch_size):
-
+            for idx, (x, y) in enumerate(loader):
                 if epoch_no == 0 and idx < warm_up:
                     self.lr = self.cfg.warmup
                     for param_group in self.optimizer.param_groups:
@@ -230,42 +237,16 @@ class Trainer(object):
                     self.lr = self.cfg.lr
                     for param_group in self.optimizer.param_groups:
                         param_group['lr'] = self.lr
-             
 
+                x = x.to(self.device)
+                y = y.to(self.device, dtype=torch.float32)
 
                 self.optimizer.zero_grad()
-                loss_tensor = torch.cuda.FloatTensor([0]).squeeze()
-
-                batch =self.data.train[idx:idx+self.cfg.batch_size]
-                batch_loss_sum = 0.
-
-                if not batch:
-                    continue
-       
-                for datum in batch:
-                    output = self.model(datum)
-                    target = torch.cuda.FloatTensor([datum.y]).squeeze()
-
-                    loss = self.loss_fn(output, target)
-                    batch_loss_sum += loss.item()
-                    loss_tensor += loss
-                    
-                    del output
-                    del target
-
-                """
-                output_list = self.model(batch)
-
-                target_list = []
-                for datum in barch:
-                    target_list. append(datum.y])
-                """
-                batch_loss_avg = batch_loss_sum / len(batch)
-                loss_tensor.backward()
+                output = self.model(x)
+                loss = self.loss_fn(output, y)
+                loss.backward()
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), .2)
 
-                #del loss_tensor
-                #torch.cuda.empty_cache()
                 
                 for param in self.model.parameters():
                     if param.grad is None:
@@ -283,8 +264,8 @@ class Trainer(object):
             
                 step += 1
                 #self.n_steps+=1
-                epoch_loss_sum += batch_loss_avg
-                self.loss_reporter.report(len(batch), batch_loss_avg, epoch_loss_sum/step, self.lr)   
+                epoch_loss_sum += loss.item()
+                self.loss_reporter.report(len(y), loss.item(), epoch_loss_sum/step, self.lr)   
 
             #if self.lr > 1.0e-05 :
             #self.lr *= 0.8
@@ -292,7 +273,9 @@ class Trainer(object):
             #    param_group['lr'] = self.lr
             epoch_loss_avg = epoch_loss_sum / step
             self.loss_reporter.end_epoch(self.model,self.optimizer, epoch_loss_avg)
+
+            self.validate(resultfile)
         self.loss_reporter.finish(self.model,self.optimizer)
 
-        resultfile = os.path.join(self.expt.experiment_root_path(), 'validation_results.txt')
-        self.validate(resultfile)
+        
+        # self.validate(resultfile)

@@ -8,9 +8,9 @@ from typing import Any, NamedTuple
 import data.data_cost as dt
 #import models.graph_models as md
 
-def load_data(data_file):
+def load_data(data_file, small_size=False):
     # type: (BaseParameters) -> dt.DataCost
-    data = dt.load_dataset(data_file)
+    data = dt.load_dataset(data_file, small_size=small_size)
 
 #    def filter_data(filt):
         # type: (Callable[[dt.DataItem], bool]) -> None

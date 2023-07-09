@@ -2,12 +2,10 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
 class BasicBlockDataset(Dataset):
-    def __init__(self, embeddings):
+    def __init__(self, embeddings, pad_idx=0):
         self.embeddings = embeddings
+        self.pad_idx = pad_idx
 
     def __len__(self):
         return len(self.embeddings)
@@ -15,32 +13,27 @@ class BasicBlockDataset(Dataset):
     def __getitem__(self, index):
         return self.embeddings[index]
     
-def block_collate_fn(batch):
-    max_size = torch.tensor([item.x.size() for item in batch]).max(dim=0)[0]
-    xs = torch.stack([
-        F.pad(item.x,
-                (0, max_size[1]-item.x.size(1), 0, max_size[0]-item.x.size(0))) 
-        for item in batch
-    ])
-    ys = torch.tensor([item.y for item in batch])
-    return xs, ys
+    def block_collate_fn(self, batch):
+        tensors = [torch.tensor(item.x) for item in batch]
+        max_len = max([len(item) for item in tensors])
+        xs = torch.stack(
+            [
+                F.pad(item, (0, max_len-len(item)), value=self.pad_idx)
+                    for item in tensors
+            ]
+        )
+        ys = torch.tensor([item.y for item in batch])
+        return xs, ys
     
 if __name__ == '__main__':
-    from data.data_cost import DataInstructionEmbedding
+    from data.data_cost import load_dataset
 
     file_name = 'training_data/intel_core.data'
-    data = DataInstructionEmbedding()
+    data = load_dataset(file_name, small_size=True)
+    train_ds = BasicBlockDataset(data.train, data.pad_idx)
+    test_ds = BasicBlockDataset(data.test, data.pad_idx)
 
-    data.raw_data = torch.load(file_name)[:1000]
-
-    data.read_meta_data()
-    data.prepare_data()
-    data.generate_datasets()
-
-    train_ds = BasicBlockDataset(data.train)
-    test_ds = BasicBlockDataset(data.test)
-
-    loader = DataLoader(train_ds, batch_size=8, collate_fn=block_collate_fn)
+    loader = DataLoader(train_ds, batch_size=8, collate_fn=train_ds.block_collate_fn)
     for sample in loader:
         print(sample)
         print(sample[0].size())

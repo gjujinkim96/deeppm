@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from utils import split_last, merge_last
+from utils import split_last, merge_last, get_device
 
 
 class Config(NamedTuple):
@@ -35,6 +35,9 @@ class Config(NamedTuple):
 
     def set_vocab_size(cls, size):
         Config.vocab_size = size
+
+    def set_pad_idx(cls, pad_idx):
+        Config.pad_idx = pad_idx
 
 
 def gelu(x):
@@ -60,6 +63,7 @@ class PositionalEncoding(nn.Module):
         def __init__(self, d_hid, n_position=256):
             super(PositionalEncoding, self).__init__()
 
+            self.n_position = n_position
             # Not a parameter
             self.register_buffer('pos_table', self._get_sinusoid_encoding_table(n_position, d_hid))
 
@@ -71,14 +75,13 @@ class PositionalEncoding(nn.Module):
             sinusoid_table = np.array([get_position_angle_vec(pos_i) for pos_i in range(n_position)])
             sinusoid_table[:, 0::2] = np.sin(sinusoid_table[:, 0::2])  # dim 2i
             sinusoid_table[:, 1::2] = np.cos(sinusoid_table[:, 1::2])  # dim 2i+1
-
-            return torch.FloatTensor(sinusoid_table).unsqueeze(0)
+            # print(torch.tensor(sinusoid_table).unsqueeze(0).shape)
+            return torch.tensor(sinusoid_table).unsqueeze(0).to(dtype=torch.float32)
 
         def forward(self, x):
-            if x.size(1) !=  self.pos_table[:,:x.size(1)].size(1):
-                print(x.size())
-                print(self.pos_table[:,:x.size(1)].size())
-            return x + self.pos_table[:, :x.size(1)].clone().detach()
+            # print('x', x.shape)
+            max_size = min(x.size(1), self.n_position)
+            return x + self.pos_table[:, :max_size]
 
 
 class Embeddings(nn.Module):
@@ -226,64 +229,64 @@ class DeepPM(nn.Module):
     """DeepPM model with Trasformer """
     def __init__(self, cfg):
         super().__init__()
+
+
+        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, dtype=torch.float32, device=get_device())
+        self.blocks = nn.TransformerEncoder(block, cfg.n_layers)
+
         self.pad_idx = cfg.pad_idx
-        self.embed = Embeddings(cfg)
+        self.embed = nn.Embedding(cfg.vocab_size+1, cfg.dim, padding_idx = cfg.pad_idx,
+                                dtype=torch.float32, device=get_device()) # token embedding
 
-        self.pre_blocks = nn.ModuleList([Block(cfg) for _ in range(2)])#cfg.n_layers)])
-        self.token_blocks = nn.ModuleList([Block(cfg) for _ in range(2)])#cfg.n_layers)])
+        # self.blocks = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layers)])#cfg.n_layers)])
+        # self.pre_blocks = nn.ModuleList([Block(cfg) for _ in range(2)])#cfg.n_layers)])
+        # self.token_blocks = nn.ModuleList([Block(cfg) for _ in range(2)])#cfg.n_layers)])
 
-        self.pos_embed = PositionalEncoding(cfg.dim, 400)
-
+        self.pos_embed = PositionalEncoding(cfg.dim, cfg.max_len).to(get_device())
+        self.max_len = cfg.max_len
         #self.pos_embed = nn.Embedding(250, cfg.dim) # position embedding, 1500
-        self.instruction_blocks = nn.ModuleList([Block(cfg) for _ in range(4)])#cfg.n_layers)])
-        self.prediction = nn.Linear(cfg.dim,1)
+        # self.instruction_blocks = nn.ModuleList([Block(cfg) for _ in range(4)])#cfg.n_layers)])
+        self.prediction = nn.Linear(cfg.dim, 1, dtype=torch.float32)
        
     def forward(self, item):
-
-        bb_list = []
-        token_len = 0
-        for instr, token_inputs in zip(item.block.instrs, item.x):
-            bb_list.append(token_inputs)
-            if len(token_inputs) > token_len :
-                token_len = len(token_inputs)
-
-        embed_input = []
-        for l in bb_list:
-            while len(l) < token_len:
-                l.insert(len(l), self.pad_idx)
-            embed_input.append(l)
-
-        t_output = self.embed(torch.cuda.LongTensor(embed_input))
+        # print('item device', item.device) 
+        input = item[:, :self.max_len]
+        padding_mask = (input == self.pad_idx).transpose(0, 1)
+        t_output = self.embed(input)
+        # print(t_output.size())
         t_output = self.pos_embed(t_output)
+        # print(t_output.size())
 
-        n_instr, n_token, n_dim = t_output.size()
+        # batch_size, n_instr, n_dim = t_output.size()
 
-        t_output = t_output.view([n_instr*n_token, n_dim])
-        t_output = t_output.unsqueeze(0)
-
-        for t_block in self.pre_blocks:
-            t_output = t_block(t_output)
+        # B, L, D
+        # print(t_output.dtype)
+        t_output = self.blocks(t_output, src_key_padding_mask=padding_mask)
     
-        t_output = t_output.squeeze(0)
-        t_output = t_output.view([n_instr, n_token, n_dim])
 
-        for t_block in self.token_blocks:
-            t_output = t_block(t_output)
+        # t_output = t_output.view([batch_size, n_instr, n_token, n_dim])
+
+        # t_output = t_output.squeeze(0)
+        # t_output = t_output.view([n_instr, n_token, n_dim])
+
+        # for t_block in self.token_blocks:
+        #     t_output = t_block(t_output)
         
-        t_output = t_output[:,0,:]
-        while len(t_output.size())<3:
-            t_output = t_output.unsqueeze(0)
-        i_output = self.pos_embed(t_output)
-        del t_output
+        # t_output = t_output[:,0,:]
+        # while len(t_output.size())<3:
+        #     t_output = t_output.unsqueeze(0)
+        # i_output = self.pos_embed(t_output)
+        # del t_output
 
-        for i_block in self.instruction_blocks:
-            i_output = i_block(i_output)
+        # for i_block in self.instruction_blocks:
+        #     i_output = i_block(i_output)
 
-        i_output = i_output.squeeze(0)
-        i_output = i_output.sum(dim = 0)
+        # i_output = i_output.squeeze(0)
+        # i_output = i_output.sum(dim = 0)
         
         # do prediction layer
-        out = self.prediction(i_output).squeeze()
+
+        out = self.prediction(t_output.sum(dim=1)).squeeze(1)
 
         return out
             

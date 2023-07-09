@@ -6,7 +6,7 @@ import DeepPM_utils
 import os
 import subprocess
 import torch
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 HOME = os.path.dirname(os.path.abspath(__file__))
 _TOKENIZER = os.path.join(HOME, 'tokenizer')

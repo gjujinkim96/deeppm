@@ -5,7 +5,7 @@ import torch.autograd as autograd
 import torch.optim as optim
 import torch
 import torch.nn.functional as F
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from .data import Data
 import matplotlib.pyplot as plt
 import statistics
@@ -13,6 +13,7 @@ import pandas as pd
 import xml.etree.ElementTree as ET
 import itertools
 
+import os
 import sys
 sys.path.append('..')
 
@@ -21,14 +22,13 @@ import utilities as ut
 
 class DataItem:
     def __init__(self, x, y, block, code_id, pad_idx):
-        max_len = max(len(elem) for elem in x)
-        self.x = torch.stack([F.pad(torch.tensor(elem), (0, max_len-len(elem)), value=pad_idx) for elem in x])
+        self.x = x
         self.y = y
         self.block = block
         self.code_id = code_id
 
     def __repr__(self):
-        return f'---- Block ----\n{self.block}\nX Size: {self.x.size()}  Y: {self.y}'
+        return f'---- Block ----\n{self.block}\nX: {self.x}  Y: {self.y}'
 
 class DataInstructionEmbedding(Data):
 
@@ -37,6 +37,7 @@ class DataInstructionEmbedding(Data):
         self.token_to_hot_idx = {}
         self.hot_idx_to_token = {}
         self.data = []
+        # self.raw = []
 
     def dump_dataset_params(self):
         return (self.token_to_hot_idx, self.hot_idx_to_token)
@@ -54,7 +55,7 @@ class DataInstructionEmbedding(Data):
                 self.hot_idx_to_token[self.token_to_hot_idx[elem]] = elem
             return self.token_to_hot_idx[elem]
         
-        pad_idx = hot_idxify('<PAD>')
+        self.pad_idx = hot_idxify('<PAD>')
 
         if progress:
             iterator = tqdm(self.raw_data)
@@ -69,6 +70,7 @@ class DataInstructionEmbedding(Data):
             block_root = ET.fromstring(code_xml)
             instrs = []
             raw_instrs = []
+            readable_raw = ['<START>']
             curr_mem = self.mem_start
             for _ in range(1): # repeat for duplicated blocks
                 # handle missing or incomplete code_intel
@@ -109,23 +111,30 @@ class DataInstructionEmbedding(Data):
                             dsts.append(int(dst.text))
 
                     raw_instr.append('<END>')
-                    raw_instrs.append(list(map(hot_idxify, raw_instr)))
+                    readable_raw.extend(raw_instr)
+                    # raw_instrs.extend(list(map(hot_idxify, raw_instr)))
                     instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
                     instrs[-1].intel = m_code_intel
-            if len(raw_instrs) > 400:
-                #print(len(raw_instrs))
-                continue
+
+            readable_raw.append('<DONE>')
+            raw_instrs = list(map(hot_idxify, readable_raw))
+            # if len(raw_instrs) > 400:
+            #     #print(len(raw_instrs))
+            #     continue
 
             block = ut.BasicBlock(instrs)
             block.create_dependencies()
-            datum = DataItem(raw_instrs, timing, block, code_id, pad_idx)
+            datum = DataItem(raw_instrs, timing, block, code_id, self.pad_idx)
             self.data.append(datum)
+            # self.raw.append(readable_raw)
 
-def load_dataset(data_savefile=None, arch=None, format='text'):
+def load_dataset(data_savefile, small_size=False):
     data = DataInstructionEmbedding()
 
-    data.raw_data = torch.load(data_savefile)
-
+    if small_size:
+        data.raw_data = torch.load(data_savefile)[:100]
+    else:
+        data.raw_data = torch.load(data_savefile)
     data.read_meta_data()
     data.prepare_data()
     data.generate_datasets()
