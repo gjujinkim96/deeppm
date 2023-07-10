@@ -37,7 +37,7 @@ class DataInstructionEmbedding(Data):
         self.token_to_hot_idx = {}
         self.hot_idx_to_token = {}
         self.data = []
-        # self.raw = []
+        self.raw = []
 
     def dump_dataset_params(self):
         return (self.token_to_hot_idx, self.hot_idx_to_token)
@@ -126,7 +126,7 @@ class DataInstructionEmbedding(Data):
             block.create_dependencies()
             datum = DataItem(raw_instrs, timing, block, code_id, self.pad_idx)
             self.data.append(datum)
-            # self.raw.append(readable_raw)
+            self.raw.append(readable_raw)
 
 def load_dataset(data_savefile, small_size=False):
     data = DataInstructionEmbedding()
