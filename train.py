@@ -220,7 +220,7 @@ class Trainer(object):
         loader = DataLoader(self.train_ds, shuffle=True, num_workers=4,
                         batch_size=self.cfg.batch_size, collate_fn=self.train_ds.block_collate_fn)
         
-        warm_up = int((len(self.train_ds) * 0.3))
+        warm_up = int((len(loader) * 0.3))
 
         for epoch_no in range(self.cfg.n_epochs):
             epoch_loss_sum = 0.

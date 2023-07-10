@@ -118,9 +118,9 @@ class DataInstructionEmbedding(Data):
 
             readable_raw.append('<DONE>')
             raw_instrs = list(map(hot_idxify, readable_raw))
-            # if len(raw_instrs) > 400:
-            #     #print(len(raw_instrs))
-            #     continue
+            if len(raw_instrs) > 4000:
+                #print(len(raw_instrs))
+                continue
 
             block = ut.BasicBlock(instrs)
             block.create_dependencies()
