@@ -231,7 +231,8 @@ class DeepPM(nn.Module):
         super().__init__()
 
 
-        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, dtype=torch.float32, device=get_device())
+        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, dtype=torch.float32, device=get_device(),
+                                            batch_first=True)
         self.blocks = nn.TransformerEncoder(block, cfg.n_layers)
 
         self.pad_idx = cfg.pad_idx
@@ -250,9 +251,9 @@ class DeepPM(nn.Module):
        
     def forward(self, item):
         # print('item device', item.device) 
-        input = item[:, :self.max_len]
-        padding_mask = (input == self.pad_idx).transpose(0, 1)
-        t_output = self.embed(input)
+        inputs = item[:, :self.max_len]
+        padding_mask = (inputs == self.pad_idx)
+        t_output = self.embed(inputs)
         # print(t_output.size())
         t_output = self.pos_embed(t_output)
         # print(t_output.size())
@@ -266,27 +267,8 @@ class DeepPM(nn.Module):
 
         # t_output = t_output.view([batch_size, n_instr, n_token, n_dim])
 
-        # t_output = t_output.squeeze(0)
-        # t_output = t_output.view([n_instr, n_token, n_dim])
-
-        # for t_block in self.token_blocks:
-        #     t_output = t_block(t_output)
-        
-        # t_output = t_output[:,0,:]
-        # while len(t_output.size())<3:
-        #     t_output = t_output.unsqueeze(0)
-        # i_output = self.pos_embed(t_output)
-        # del t_output
-
-        # for i_block in self.instruction_blocks:
-        #     i_output = i_block(i_output)
-
-        # i_output = i_output.squeeze(0)
-        # i_output = i_output.sum(dim = 0)
-        
-        # do prediction layer
-
-        out = self.prediction(t_output.sum(dim=1)).squeeze(1)
+        t_output = t_output[:, 0, :]
+        out = self.prediction(t_output).squeeze(1)
 
         return out
             
