@@ -79,7 +79,6 @@ class PositionalEncoding(nn.Module):
             return torch.tensor(sinusoid_table).unsqueeze(0).to(dtype=torch.float32)
 
         def forward(self, x):
-            # print('x', x.shape)
             max_size = min(x.size(1), self.n_position)
             return x + self.pos_table[:, :max_size]
 
@@ -231,29 +230,19 @@ class DeepPM(nn.Module):
         super().__init__()
 
 
-        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, dtype=torch.float32, device=get_device(),
+        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=get_device(),
                                             batch_first=True)
         self.blocks = nn.TransformerEncoder(block, cfg.n_layers)
 
         self.pad_idx = cfg.pad_idx
-        self.embed = nn.Embedding(cfg.vocab_size+1, cfg.dim, padding_idx = cfg.pad_idx,
+        self.embed = nn.Embedding(cfg.vocab_size, cfg.dim, padding_idx = cfg.pad_idx,
                                 dtype=torch.float32, device=get_device()) # token embedding
-
-        # self.blocks = nn.ModuleList([Block(cfg) for _ in range(cfg.n_layers)])#cfg.n_layers)])
-        # self.pre_blocks = nn.ModuleList([Block(cfg) for _ in range(2)])#cfg.n_layers)])
-        # self.token_blocks = nn.ModuleList([Block(cfg) for _ in range(2)])#cfg.n_layers)])
-
         self.pos_embed = PositionalEncoding(cfg.dim, cfg.max_len).to(get_device())
-        self.max_len = cfg.max_len
-        #self.pos_embed = nn.Embedding(250, cfg.dim) # position embedding, 1500
-        # self.instruction_blocks = nn.ModuleList([Block(cfg) for _ in range(4)])#cfg.n_layers)])
         self.prediction = nn.Linear(cfg.dim, 1, dtype=torch.float32)
        
     def forward(self, item):
-        # print('item device', item.device) 
-        inputs = item[:, :self.max_len]
-        padding_mask = (inputs == self.pad_idx)
-        t_output = self.embed(inputs)
+        padding_mask = (item == self.pad_idx)
+        t_output = self.embed(item)
         # print(t_output.size())
         t_output = self.pos_embed(t_output)
         # print(t_output.size())
@@ -262,10 +251,9 @@ class DeepPM(nn.Module):
 
         # B, L, D
         # print(t_output.dtype)
+        # print(f't_output: {t_output.shape}  mask: {padding_mask.shape}')
+        # print()
         t_output = self.blocks(t_output, src_key_padding_mask=padding_mask)
-    
-
-        # t_output = t_output.view([batch_size, n_instr, n_token, n_dim])
 
         t_output = t_output[:, 0, :]
         out = self.prediction(t_output).squeeze(1)

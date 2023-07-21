@@ -10,6 +10,7 @@ from tqdm.auto import tqdm
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.autograd as autograd
 import time
 import losses as ls
 import random
@@ -90,12 +91,13 @@ class LossReporter(object):
         self.pbar.set_description(desc)
         self.pbar.update(n_items)
 
-    def check_point(self, model, optimizer, file_name):
+    def check_point(self, model, optimizer, lr_scheduler, file_name):
 
         state_dict = {
             'epoch': self.epoch_no,
             'model': model.state_dict(),
             'optimizer':optimizer.state_dict(),
+            'lr_scheduler': lr_scheduler.state_dict(),
         }
             
         try: 
@@ -105,7 +107,7 @@ class LossReporter(object):
 
         torch.save(state_dict, file_name) 
 
-    def end_epoch(self, model, optimizer, loss):
+    def end_epoch(self, model, optimizer, lr_scheduler, loss):
         
         self.loss = loss
 
@@ -119,43 +121,36 @@ class LossReporter(object):
         self.loss_report_file.write(message + '\n')
 
         file_name = os.path.join(self.experiment.checkpoint_file_dir(),'{}.mdl'.format(self.epoch_no))
-        self.check_point(model,optimizer,file_name)
+        self.check_point(model,optimizer, lr_scheduler, file_name)
 
 
-    def finish(self, model, optimizer):
+    def finish(self, model, optimizer, lr_scheduler):
 
         self.pbar.close()
         print("Finishing training")
 
         file_name = os.path.join(self.root_path, 'trained.mdl')
-        self.check_point(model,optimizer,file_name)
+        self.check_point(model,optimizer, lr_scheduler, file_name)
 
 
 class Trainer(object):
     """ Training Helper Class """
-    def __init__(self, cfg, model, ds, expt, optimizer, device):
-        self.cfg = cfg # config for training : see class Config
+    def __init__(self, train_cfg, model, ds, expt, optimizer, lr_scheduler, loss_fn, device):
+        self.train_cfg = train_cfg # config for training : see class Config
         self.model = model
         self.train_ds, self.test_ds = ds
         self.expt = expt
-        self.lr = cfg.lr
-        #self.dim = 756
-        #self.n_steps = 1
-        #self.n_warmup_steps=3000
-        #self.lr = (self.dim ** -0.5) * min(self.n_steps ** (-0.5), self.n_steps * self.n_warmup_steps ** (-1.5))
         self.optimizer = optimizer
-        #self.optimizer = optim.SGD(self.model.parameters(), lr=self.lr, momentum=0.9, weight_decay=0.,nesterov=False)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.lr)#, betas=(0.9,0.98), eps = 1e-09)
+        self.lr_scheduler = lr_scheduler
         self.save_dir = self.expt.experiment_root_path()
         self.device = device # device name
 
-        self.loss_fn = ls.mse_loss
+        self.loss_fn = loss_fn
         self.loss_reporter = LossReporter(expt, len(self.train_ds))
 
         self.tolerance = 25.
 
     def correct_regression(self, x, y):
-        
         if x.shape != ():
             x = x[-1]
             y = y[-1]
@@ -165,13 +160,13 @@ class Trainer(object):
         if percentage < self.tolerance:
             self.correct += 1
 
-    def torch_correct_regression(self, x, y):
-        percentage = torch.abs(x - y) * 100.0 / (y + 1e-3)
+    def torch_correct_regression(self, x, raw_y):
+        x = torch.exp(x) - 1e-4
+        percentage = torch.abs(x - raw_y) * 100.0 / (raw_y + 1e-3)
         return sum(percentage < self.tolerance)
 
 
     def print_final(self, f, x, y):
-        
         if x.shape != ():
             size = x.shape[0]
             for i in range(size):
@@ -181,67 +176,62 @@ class Trainer(object):
             f.write('%f,%f\n' % (x,y))
 
     def validate(self, resultfile):
-        f = open(resultfile,'w')
-
         self.model.eval()
         self.model.to(self.device)
+
+        f = open(resultfile,'w')
 
         correct = 0
         total_losses = []
         with torch.no_grad():
             loader = DataLoader(self.test_ds, shuffle=False, num_workers=2,
-                        batch_size=self.cfg.batch_size, collate_fn=self.test_ds.block_collate_fn)
-            for x, target in tqdm(loader):
-                x = x.to(self.device) # TODO: is it required?, I don't know
-                target = target.to(self.device, dtype=torch.float32)
-                 
+                        batch_size=self.train_cfg.batch_size, collate_fn=self.test_ds.block_collate_fn)
+            for x, target, target_raw in tqdm(loader):
+                x = x.to(self.device)
+                target = target.to(self.device)
+                target_raw = target_raw.to(self.device)
 
+                # print(x.shape)
                 output = self.model(x)
-
-                # self.print_final(f, output, target) # TODO: what is this?
-                correct += self.torch_correct_regression(output, target)
+                correct += self.torch_correct_regression(output, target_raw)
 
                 loss = self.loss_fn(output, target)
                 total_losses.append(loss)
 
-
-        f.write(f'loss - {sum(total_losses)/len(total_losses)}\n')
+        ret_loss = sum(total_losses)/len(total_losses)
+        f.write(f'loss - {ret_loss}\n')
         f.write(f'{correct}, {len(self.test_ds)}\n')
-        print(f'Validate: loss - {sum(total_losses)/len(total_losses)}\n\t{correct}/{len(self.test_ds)}\n')
+        print(f'Validate: loss - {sum(total_losses)/len(total_losses)}\n\t{correct}/{len(self.test_ds)} = {correct/len(self.test_ds)}\n')
+        print()
         f.close()
+        return ret_loss
 
     def train(self):
         """ Train Loop """
         resultfile = os.path.join(self.expt.experiment_root_path(), 'validation_results.txt')
 
-        self.model.train()
         self.model.to(self.device)
 
-        loader = DataLoader(self.train_ds, shuffle=True, num_workers=4,
-                        batch_size=self.cfg.batch_size, collate_fn=self.train_ds.block_collate_fn)
-        
-        warm_up = int((len(loader) * 0.3))
+        loader = DataLoader(self.train_ds, shuffle=True, num_workers=2, 
+                        batch_size=self.train_cfg.batch_size, collate_fn=self.train_ds.block_collate_fn)
 
-        for epoch_no in range(self.cfg.n_epochs):
+        # with autograd.detect_anomaly(False):
+        for epoch_no in range(self.train_cfg.n_epochs):
             epoch_loss_sum = 0.
             step = 0
+            total_correct = 0
+            total_cnts = 0
+            print(f'using lr: {self.optimizer.param_groups[0]["lr"]}')
             self.loss_reporter.start_epoch(epoch_no + 1) 
 
-            for idx, (x, y) in enumerate(loader):
-                if epoch_no == 0 and idx < warm_up:
-                    self.lr = self.cfg.warmup
-                    for param_group in self.optimizer.param_groups:
-                        param_group['lr'] = self.lr
-                   
-                elif epoch_no == 0 and idx > warm_up:
-                    self.lr = self.cfg.lr
-                    for param_group in self.optimizer.param_groups:
-                        param_group['lr'] = self.lr
-
-                x = x.to(self.device)
-                y = y.to(self.device, dtype=torch.float32)
-
+            self.model.train()
+            for idx, (x, y, raw_y) in enumerate(loader):
+                self.model.train()
                 self.optimizer.zero_grad()
+                x = x.to(self.device)
+                y = y.to(self.device)
+                raw_y = raw_y.to(self.device)
+
                 output = self.model(x)
                 loss = self.loss_fn(output, y)
                 loss.backward()
@@ -253,29 +243,22 @@ class Trainer(object):
                         continue
 
                     if torch.isnan(param.grad).any():
-                        self.loss_reporter.finish(self.model, self.optimizer)
+                        print("BAD: isnan found in grad")
+                        self.loss_reporter.finish(self.model, self.optimizer, self.lr_scheduler)
                         return
                 
-                #self.lr = (self.dim ** -0.5) * min(self.n_steps ** (-0.5), self.n_steps * self.n_warmup_steps ** (-1.5))
-                #for param_group in self.optimizer.param_groups:
-                #     param_group['lr'] = self.lr 
-
                 self.optimizer.step()
+
             
                 step += 1
-                #self.n_steps+=1
                 epoch_loss_sum += loss.item()
-                self.loss_reporter.report(len(y), loss.item(), epoch_loss_sum/step, self.lr)   
+                total_correct += self.torch_correct_regression(output, raw_y)
+                total_cnts += len(y)
+                self.loss_reporter.report(len(y), loss.item(), epoch_loss_sum/step, total_correct/total_cnts)   
 
-            #if self.lr > 1.0e-05 :
-            #self.lr *= 0.8
-            #for param_group in self.optimizer.param_groups:
-            #    param_group['lr'] = self.lr
             epoch_loss_avg = epoch_loss_sum / step
-            self.loss_reporter.end_epoch(self.model,self.optimizer, epoch_loss_avg)
+            self.loss_reporter.end_epoch(self.model,self.optimizer, self.lr_scheduler, epoch_loss_avg)
 
-            self.validate(resultfile)
-        self.loss_reporter.finish(self.model,self.optimizer)
-
-        
-        # self.validate(resultfile)
+            val_loss = self.validate(resultfile)
+            self.lr_scheduler.step(val_loss)
+        self.loss_reporter.finish(self.model,self.optimizer, self.lr_scheduler)

@@ -3,9 +3,10 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
 class BasicBlockDataset(Dataset):
-    def __init__(self, embeddings, pad_idx=0):
+    def __init__(self, embeddings, max_len, pad_idx=0):
         self.embeddings = embeddings
         self.pad_idx = pad_idx
+        self.max_len = max_len
 
     def __len__(self):
         return len(self.embeddings)
@@ -22,8 +23,9 @@ class BasicBlockDataset(Dataset):
                     for item in tensors
             ]
         )
-        ys = torch.tensor([item.y for item in batch])
-        return xs, ys
+        raw_ys = torch.tensor([item.y for item in batch])
+        ys = torch.log(raw_ys + 1e-4)
+        return xs[:, :self.max_len], ys, raw_ys
     
 if __name__ == '__main__':
     from data.data_cost import load_dataset
