@@ -39,9 +39,9 @@ def main():
 
     set_seeds(train_cfg.seed)
 
-    data = load_data(args.data, small_size=args.small_size, stacked=train_cfg.stacked)
-
     model_cfg = models.Config.from_json(args.model_cfg)
+
+    data = load_data(args, model_cfg)
     model_cfg.set_vocab_size(len(data.token_to_hot_idx))
     model_cfg.set_pad_idx(data.pad_idx)
 

@@ -1,10 +1,10 @@
 {
     "batch_size": 16,
+    "val_batch_size": 16,
     "lr": 0.00001,
     "n_epochs": 30,
     "warmup": 0.001,
     "clip_grad_norm": 0.2,
-    "stacked": true,
     "lr_scheduler": "LinearLR",
     "optimizer": "Adam",
     "loss_fn": "mape"

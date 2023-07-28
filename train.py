@@ -24,18 +24,18 @@ from utils import correct_regression
 
 class Config(NamedTuple):
     """ Hyperparameters for training """
-    lr_scheduler: str
-    optimizer: str
-    clip_grad_norm: float
-    loss_fn: str
+    lr_scheduler: str = "LinearLR"
+    optimizer: str = "Adam"
+    clip_grad_norm: float = 0.2
+    loss_fn: str = "mape"
     seed: int = 3431 # random seed
     batch_size: int = 32
+    val_batch_size: int = 32
     lr: int = 5e-5 # learning rate
     n_epochs: int = 10 # the number of epoch
     # `warm up` period = warmup(0.1)*total_steps
     # linearly increasing learning rate from zero to the specified value(5e-5)
     warmup: float = 0.001
-    stacked: bool = False
     
     #save_steps: int = 100 # interval for saving model
     #total_steps: int = 100000 # total number of steps to train
@@ -133,7 +133,7 @@ class LossReporter(object):
         self.loss_report_file.write(message + '\n')
 
         file_name = os.path.join(self.experiment.checkpoint_file_dir(),'{}.mdl'.format(self.epoch_no))
-        # self.check_point(model,optimizer, lr_scheduler, file_name)
+        self.check_point(model,optimizer, lr_scheduler, file_name)
 
 
     def finish(self, model, optimizer, lr_scheduler):
@@ -200,15 +200,13 @@ class Trainer(object):
         y = y.to(self.device)
 
         output = self.model(x)
+        loss = self.loss_fn(output, y)
+        if loss_mod is not None:
+            loss *= loss_mod
 
         answers.extend(y.tolist())
         predictions.extend(output.tolist())
 
-        loss = self.loss_fn(output, y)
-
-        if loss_mod is not None:
-            loss *= loss_mod
-        
         if is_train:
             loss.backward()
 
@@ -242,14 +240,14 @@ class Trainer(object):
         result.loss_sum = result.loss * result.batch_len
         return result
     
-    def validate(self, resultfile):
+    def validate(self, resultfile, epoch):
         self.model.eval()
         self.model.to(self.device)
 
         f = open(resultfile,'w')
 
         loader = DataLoader(self.test_ds, shuffle=False, num_workers=self.cpu_count,
-            batch_size=self.train_cfg.batch_size, collate_fn=self.test_ds.block_collate_fn)
+            batch_size=self.train_cfg.val_batch_size, collate_fn=self.test_ds.block_collate_fn)
         epoch_result = self.BatchResult()
 
         with torch.no_grad():
@@ -265,7 +263,7 @@ class Trainer(object):
         print(f'Validate: loss - {epoch_result.loss}\n\t{correct}/{epoch_result.batch_len} = {correct / epoch_result.batch_len}\n')
         print()
 
-        wandb_log.wandb_log_val(epoch_result)
+        wandb_log.wandb_log_val(epoch_result, epoch)
 
     def train(self):
         """ Train Loop """
@@ -275,6 +273,7 @@ class Trainer(object):
 
         loader = DataLoader(self.train_ds, shuffle=True, num_workers=self.cpu_count, 
                         batch_size=self.train_cfg.batch_size, collate_fn=self.train_ds.block_collate_fn)
+        epoch_len = len(loader)
 
         # with autograd.detect_anomaly(True):
         for epoch_no in range(self.train_cfg.n_epochs):
@@ -293,9 +292,10 @@ class Trainer(object):
 
                 batch_result = self.run_batch(batch, is_train=True)
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm)
+
                 self.optimizer.step()
 
-                wandb_log.wandb_log_train(batch_result, self.lr_scheduler.get_last_lr()[0])
+                wandb_log.wandb_log_train(batch_result, self.lr_scheduler.get_last_lr()[0], epoch=epoch_no + idx/epoch_len)
 
 
                 step += 1
@@ -309,6 +309,6 @@ class Trainer(object):
             epoch_loss_avg = epoch_loss_sum / step
             self.loss_reporter.end_epoch(self.model,self.optimizer, self.lr_scheduler, epoch_loss_avg)
 
-            self.validate(resultfile)
+            self.validate(resultfile, epoch_no + 1)
             self.lr_scheduler.step()
         self.loss_reporter.finish(self.model,self.optimizer, self.lr_scheduler)

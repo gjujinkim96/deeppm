@@ -3,7 +3,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
 def load_dataset(data, train_cfg, model_cfg):
-    if train_cfg.stacked:
+    if model_cfg.stacked:
         train_ds = StackedBlockDataset(data.train, model_cfg)
         test_ds = StackedBlockDataset(data.train, model_cfg)
     else:

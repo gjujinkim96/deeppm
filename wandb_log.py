@@ -13,12 +13,14 @@ def wandb_init(args, model_cfg, train_cfg, train_data_len):
 	        "n_layers": model_cfg.n_layers,
 	        "n_heads": model_cfg.n_heads,
 	        "max_len": model_cfg.max_len,
+            "stacked_data": model_cfg.stacked,
+            "only_unique": model_cfg.only_unique,
 
             "seed": train_cfg.seed,
             "batch_size": train_cfg.batch_size,
+            "val_batch_size": train_cfg.val_batch_size,
             "lr": train_cfg.lr,
             "n_epochs": train_cfg.n_epochs,
-            "stacked_data": train_cfg.stacked,
             "lr_scheduler": train_cfg.lr_scheduler,
             "optimizer": train_cfg.optimizer,
             "loss_fn": train_cfg.loss_fn,
@@ -31,27 +33,33 @@ def wandb_init(args, model_cfg, train_cfg, train_data_len):
         mode=mode,
     )
 
+
 def wandb_finish():
     wandb.finish()
 
-def cat_by_inst(value):
-    if value < 23:
-        return '1~22'
-    elif value < 50:
-        return '23~49'
-    elif value < 100:
-        return '50~99'
-    elif value < 150:
-        return '100~149'
-    elif value < 200:
-        return '150~199'
-    return '200~'
+cat_names = ['A:1~22', 'B:23~49', 'C:50~99', 'D:100~149', 'E:150~199', 'F:200~']
 
-def wandb_log_val(er):
+def cat_by_inst(value):
+    idx = 0
+    if value >= 23:
+        idx += 1
+    if value >= 50:
+        idx += 1
+    if value >= 100:
+        idx += 1
+    if value >= 150:
+        idx += 1
+    if value >= 200:
+        idx += 1
+
+    return cat_names[idx]
+
+def wandb_log_val(er, epoch):
     df = pd.DataFrame.from_dict({
         'predicted': er.prediction,
         'measured': er.measured,
         'inst_lens': er.inst_lens,
+        'epoch': epoch,
     })
 
     df['mape'] = abs(df.predicted - df.measured) * 100 / (df.measured + 1e-5)
@@ -60,34 +68,41 @@ def wandb_log_val(er):
         "loss/Validation": er.loss,
     }
 
-    data = [[x, y] for (x, y) in zip(er.prediction, er.measured)]
-    table = wandb.Table(data=data, columns = ["predicted", "measured"])
-    logging_dict["val/summary/Measured vs. Predicted"] = wandb.plot.scatter(table, "Predicted", "Measured", title="Measured vs. Predicted")
+    # print(len(er.prediction), len(er.measured))
+    scatter_data = [[x, y] for (x, y) in zip(df.predicted, df.measured)]
+    # print(data)
+    scatter_table = wandb.Table(data=scatter_data, columns = ["Predicted", "Measured"])
+    logging_dict["val/summary/scatter"] = wandb.plot.scatter(scatter_table, "Predicted", "Measured", title="Measured vs. Predicted")
+
+    threshold_data = [[i, (df.mape < i).mean()] for i in range(1, 100)]
+    threshold_table = wandb.Table(data=threshold_data, columns=["Threshold", "Correct"])
+    logging_dict["val/summary/threshold"] = wandb.plot.line(threshold_table, "Threshold", "Correct", title="Threshold vs. Correct")
 
     thresholds = [25, 20, 15, 10, 5, 3]
     for threshold in thresholds:
         logging_dict[f'val/correct/Threshold {threshold}'] = (df.mape < threshold).mean()
 
 
-    cat_names = ['1~22', '23~49', '50~99', '100~149', '150~199', '200~']
     df['cat'] = pd.Categorical(df.inst_lens.apply(cat_by_inst), ordered=True, categories=cat_names)
     cat_mape_mean = df.groupby('cat').mape.mean()
     for cat_name in cat_names:
         logging_dict[f'val/cat/MAPE Error {cat_name}'] = cat_mape_mean[cat_name]
 
-    data = [[label, val] for (label, val) in zip(cat_names, cat_mape_mean)]
-    table = wandb.Table(data=data, columns = ["Number of Instructions", "Mean MAPE error"])
-    logging_dict["val/summary/Mean Error Over Size"] = wandb.plot.bar(table, "Number of Instructions", "Mean MAPE error", title="Mean Error Over Size")
+    mape_data = [[label, val] for (label, val) in zip(cat_names, cat_mape_mean)]
+    mape_table = wandb.Table(data=mape_data, columns = ["Number of Instructions", "Mean MAPE Error"])
+    logging_dict["val/summary/mean error"] = wandb.plot.bar(mape_table, "Number of Instructions", 'Mean MAPE Error', title="Mean Error Over Size")
 
+    # print(logging_dict)
+    thresholds = [25, 20, 15]
     for threshold in thresholds:
         df[f't_{threshold}'] = df.mape < threshold
         cat_correct = df.groupby('cat')[f't_{threshold}'].mean()
         for cat_name in cat_names:
-            logging_dict[f'val/correct/{cat_name}/Threshold {threshold}'] = cat_correct[cat_name]
+            logging_dict[f'val/correct/threshold_{threshold}/{cat_name}'] = cat_correct[cat_name]
 
     wandb.log(logging_dict)
 
-def wandb_log_train(br, lr):
+def wandb_log_train(br, lr, epoch):
     df = pd.DataFrame.from_dict({
         'predicted': br.prediction,
         'measured': br.measured,
@@ -99,6 +114,7 @@ def wandb_log_train(br, lr):
     logging_dict = {
         "loss/Train": br.loss,
         "lr": lr,
+        'epoch': epoch,
     }
 
     thresholds = [25, 20, 15, 10, 5, 3]

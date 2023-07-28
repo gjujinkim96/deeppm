@@ -18,6 +18,7 @@ import sys
 sys.path.append('..')
 
 import utilities as ut
+from collections import defaultdict
 
 
 class DataItem:
@@ -212,8 +213,25 @@ class DataInstructionEmbedding(Data):
             datum = DataItem(raw_instrs, timing, block, code_id)
             self.data.append(datum)
 
+def hashkey(x):
+    return '@'.join('_'.join(map(str, inst)) for inst in x)
 
-def load_dataset(data_savefile, small_size=False, stacked=False):
+def extract_unique(data):    
+    grouped = defaultdict(list)
+    for idx, datum in enumerate(tqdm(data, total=len(data))):
+        grouped[hashkey(datum.x)].append(idx)
+        
+    cleaned = []
+    for k, v in tqdm(grouped.items(), total=len(grouped)):
+        vs = [data[idx].y for idx in v]
+        new_y = sum(vs) / len(vs)
+        datum = data[v[0]]
+        datum.y = new_y
+        cleaned.append(datum)
+    
+    return cleaned
+
+def load_dataset(data_savefile, small_size=False, stacked=False, only_unique=False):
     data = DataInstructionEmbedding()
 
     if small_size:
@@ -226,6 +244,9 @@ def load_dataset(data_savefile, small_size=False, stacked=False):
         data.prepare_stacked_data()
     else:
         data.prepare_data()
+
+    if only_unique:
+        data.data = extract_unique(data.data)
         
     data.generate_datasets()
 

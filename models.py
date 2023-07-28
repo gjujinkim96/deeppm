@@ -40,6 +40,9 @@ class Config(NamedTuple):
     max_len: int = 32 # Maximum Length for Positional Embeddings
     #n_segments: int = 2 # Number of Sentence Segments
     pad_idx: int = 628#500#230
+    pred_drop: float = 0
+    stacked: bool = False
+    only_unique: bool = False
 
     @classmethod
     def from_json(cls, file):
@@ -327,7 +330,7 @@ class StackedDeepPM(nn.Module):
                                 dtype=torch.float32, device=device) # token embedding
         self.pos_embed = PositionalEncoding(cfg.dim, 400).to(device)
         self.prediction = nn.Sequential(
-            nn.Dropout(),
+            nn.Dropout(cfg.pred_drop),
             nn.Linear(cfg.dim, 1, dtype=torch.float32)
         )
        
