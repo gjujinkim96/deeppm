@@ -213,3 +213,9 @@ training_data
 tokenizer
 
 
+
+*.ipynb
+encoded
+palmtree
+result_pickle
+wandb
