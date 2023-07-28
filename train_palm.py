@@ -13,21 +13,20 @@ import torch.optim as optim
 import torch.autograd as autograd
 import time
 import losses as ls
-import wandb_log
+import wandb
 from torch.utils.data import DataLoader
 import multiprocessing
 import pandas as pd
-from operator import itemgetter
-from utils import correct_regression
 # import plotting
 
 
+def sort_by_order(values, order):
+    tmp = list(zip(values, order))
+    tmp.sort(key=lambda x: x[1])
+    return [x[0] for x in tmp]
+
 class Config(NamedTuple):
     """ Hyperparameters for training """
-    lr_scheduler: str
-    optimizer: str
-    clip_grad_norm: float
-    loss_fn: str
     seed: int = 3431 # random seed
     batch_size: int = 32
     lr: int = 5e-5 # learning rate
@@ -35,8 +34,6 @@ class Config(NamedTuple):
     # `warm up` period = warmup(0.1)*total_steps
     # linearly increasing learning rate from zero to the specified value(5e-5)
     warmup: float = 0.001
-    stacked: bool = False
-    
     #save_steps: int = 100 # interval for saving model
     #total_steps: int = 100000 # total number of steps to train
 
@@ -133,7 +130,7 @@ class LossReporter(object):
         self.loss_report_file.write(message + '\n')
 
         file_name = os.path.join(self.experiment.checkpoint_file_dir(),'{}.mdl'.format(self.epoch_no))
-        # self.check_point(model,optimizer, lr_scheduler, file_name)
+        self.check_point(model,optimizer, lr_scheduler, file_name)
 
 
     def finish(self, model, optimizer, lr_scheduler):
@@ -143,6 +140,7 @@ class LossReporter(object):
 
         file_name = os.path.join(self.root_path, 'trained.mdl')
         self.check_point(model,optimizer, lr_scheduler, file_name)
+
 
 class Trainer(object):
     """ Training Helper Class """
@@ -159,9 +157,25 @@ class Trainer(object):
         self.loss_fn = loss_fn
         self.loss_reporter = LossReporter(expt, len(self.train_ds))
 
-        self.clip_grad_norm = train_cfg.clip_grad_norm
+        self.tolerance = 25.
         self.small_training = small_training
         self.cpu_count = multiprocessing.cpu_count()
+
+
+    def correct_regression(self, x, y):
+        if x.shape != ():
+            x = x[-1]
+            y = y[-1]
+
+        percentage = torch.abs(x - y) * 100.0 / (y + 1e-3)
+
+        if percentage < self.tolerance:
+            self.correct += 1
+
+    def torch_correct_regression(self, x, y):
+        percentage = torch.abs(x - y) * 100.0 / (y + 1e-3)
+        return sum(percentage < self.tolerance)
+
 
     def print_final(self, f, x, y):
         if x.shape != ():
@@ -172,106 +186,70 @@ class Trainer(object):
         else:
             f.write('%f,%f\n' % (x,y))
 
-    class BatchResult:
-        def __init__(self):
-            self.batch_len = 0
-
-            self.measured = []
-            self.prediction = []
-            self.inst_lens = []
-            
-            self.loss = 0
-            self.loss_sum = 0
-
-        def __iadd__(self, other):
-            self.batch_len += other.batch_len
-
-            self.measured.extend(other.measured)
-            self.prediction.extend(other.prediction)
-            self.inst_lens.extend(other.inst_lens)
-
-            self.loss += other.loss
-            self.loss_sum += other.loss_sum
-            return self
-
-
-    def run_model(self, x, y, answers, predictions, is_train, loss_mod=None):
-        x = x.to(self.device)
-        y = y.to(self.device)
-
-        output = self.model(x)
-
-        answers.extend(y.tolist())
-        predictions.extend(output.tolist())
-
-        loss = self.loss_fn(output, y)
-
-        if loss_mod is not None:
-            loss *= loss_mod
-        
-        if is_train:
-            loss.backward()
-
-        return loss.item()
-
-    def run_batch(self, batch, is_train=False):
-        short_x, short_y, long_x, long_y, short_inst_len, long_inst_len = \
-            itemgetter('short_x', 'short_y', 'long_x', 'long_y', 'short_inst_len', 'long_inst_len')(batch)
-
-        result = self.BatchResult()
-        short_len = len(short_y)
-        long_len = len(long_y)
-        result.batch_len = short_len + long_len
-        result.inst_lens = short_inst_len + long_inst_len
-
-        if short_len > 0:
-            loss_mod = None
-            if long_len > 0:
-                loss_mod = short_len / result.batch_len
-
-            result.loss += self.run_model(short_x, short_y, 
-                            result.measured, result.prediction,
-                            is_train, loss_mod)
-        
-        if long_len > 0:
-            for x, y in zip(long_x, long_y):
-                result.loss += self.run_model(x.unsqueeze(0), torch.tensor(y).unsqueeze(0),
-                                              result.measured, result.prediction,
-                                              is_train, 1/result.batch_len)
-        
-        result.loss_sum = result.loss * result.batch_len
-        return result
-    
     def validate(self, resultfile):
         self.model.eval()
         self.model.to(self.device)
 
         f = open(resultfile,'w')
 
-        loader = DataLoader(self.test_ds, shuffle=False, num_workers=self.cpu_count,
-            batch_size=self.train_cfg.batch_size, collate_fn=self.test_ds.block_collate_fn)
-        epoch_result = self.BatchResult()
-
+        correct = 0
         with torch.no_grad():
-            for batch in tqdm(loader):
-                epoch_result += self.run_batch(batch, is_train=False)
+            loader = DataLoader(self.test_ds, shuffle=False, num_workers=self.cpu_count,
+                        batch_size=self.train_cfg.batch_size, collate_fn=self.test_ds.block_collate_fn)
+            
+            total_correct = 0
+            total_total = 0
+            total_loss_sum = 0
+            
+            # offset = 0
+            answer = []
+            predict = []
+            # order = []
 
-        epoch_result.loss = epoch_result.loss_sum / epoch_result.batch_len 
-        correct = correct_regression(epoch_result.prediction, epoch_result.measured, 25)
-        f.write(f'loss - {epoch_result.loss}\n')
-        f.write(f'{correct}, {epoch_result.batch_len}\n')
-        f.close()
 
-        print(f'Validate: loss - {epoch_result.loss}\n\t{correct}/{epoch_result.batch_len} = {correct / epoch_result.batch_len}\n')
+            for x, y, mask in tqdm(loader):
+                total = len(y)
+                total_total += total
+                x = x.to(self.device)
+                y = y.to(self.device)
+                mask = mask.to(self.device)
+
+                output = self.model(x, mask)
+                loss = self.loss_fn(output, y)
+
+                cur_correct = self.torch_correct_regression(output, y)
+                total_correct += cur_correct
+
+                answer.extend(y.tolist())
+                predict.extend(output.tolist())
+
+                batch_loss = loss.item()
+                total_loss_sum += batch_loss * total
+
+        ret_loss = total_loss_sum/total_total
+        f.write(f'loss - {ret_loss}\n')
+        f.write(f'{correct}, {len(self.test_ds)}\n')
+        print(f'Validate: loss - {ret_loss}\n\t{total_correct}/{len(self.test_ds)} = {total_correct / total_total}\n')
         print()
 
-        wandb_log.wandb_log_val(epoch_result)
+        data = [[x, y] for (x, y) in zip(answer, predict)]
+        table = wandb.Table(data=data, columns = ["answer", "predict"])
+        wandb.log({
+                    "val_loss": ret_loss,
+                    "val_batch_correct": total_correct,
+                    "val_batch_accuracy": total_correct / total_total,
+                    "comp": wandb.plot.scatter(table, "answer", "predict")
+                })
+
+        f.close()
+        return ret_loss
 
     def train(self):
         """ Train Loop """
         resultfile = os.path.join(self.expt.experiment_root_path(), 'validation_results.txt')
 
         self.model.to(self.device)
+        wandb.watch(self.model, log_freq=500)
 
         loader = DataLoader(self.train_ds, shuffle=True, num_workers=self.cpu_count, 
                         batch_size=self.train_cfg.batch_size, collate_fn=self.train_ds.block_collate_fn)
@@ -280,35 +258,64 @@ class Trainer(object):
         for epoch_no in range(self.train_cfg.n_epochs):
             epoch_loss_sum = 0.
             step = 0
-            total_correct = 0
-            total_cnts = 0
-            print(f'using lr: {self.optimizer.param_groups[0]["lr"]}')
+            # print(f'using lr: {self.optimizer.param_groups[0]["lr"]}')
             self.loss_reporter.start_epoch(epoch_no + 1) 
 
             self.model.train()
             
-            for idx, batch in enumerate(loader):
+            total_cnts = 0
+            total_correct = 0
+            epoch_loss_sum = 0
+            for idx, (x, y, mask) in enumerate(loader):
                 if self.small_training and idx > 100:
                     break
 
-                batch_result = self.run_batch(batch, is_train=True)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm)
-                self.optimizer.step()
+                total = len(y)
 
-                wandb_log.wandb_log_train(batch_result, self.lr_scheduler.get_last_lr()[0])
+                x = x.to(self.device)
+                y = y.to(self.device)
+                mask = mask.to(self.device)
+
+                output = self.model(x, mask)
+                loss = self.loss_fn(output, y) 
+                loss.backward()
+
+                cur_correct = self.torch_correct_regression(output, y)
+                total_correct += cur_correct
+
+
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), .2)
+                
+                for param in self.model.parameters():
+                    if param.grad is None:
+                        continue
+
+                    if torch.isnan(param.grad).any():
+                        print("BAD: isnan found in grad")
+                        self.loss_reporter.finish(self.model, self.optimizer, self.lr_scheduler)
+                        return
+                
+                self.optimizer.step()
 
 
                 step += 1
-                epoch_loss_sum += batch_result.loss_sum
-                total_cnts += batch_result.batch_len
-                total_correct += correct_regression(batch_result.prediction, batch_result.measured, 25)
-                self.loss_reporter.report(batch_result.batch_len, 
-                                    batch_result.loss, epoch_loss_sum/step, total_correct/total_cnts)   
+                batch_loss = loss.item()
+                epoch_loss_sum += batch_loss
+                total_cnts += total
+                self.loss_reporter.report(total, batch_loss, epoch_loss_sum/step, total_correct/total_cnts)   
 
-              
+                
+                wandb.log({
+                    "loss": batch_loss,
+                    "batch_size": total,
+                    'batch_correct': cur_correct,
+                    "batch_accuracy": cur_correct / total,
+                    "lr": self.lr_scheduler.get_last_lr()[0],
+                })
+
             epoch_loss_avg = epoch_loss_sum / step
             self.loss_reporter.end_epoch(self.model,self.optimizer, self.lr_scheduler, epoch_loss_avg)
 
-            self.validate(resultfile)
+            val_loss = self.validate(resultfile)
             self.lr_scheduler.step()
         self.loss_reporter.finish(self.model,self.optimizer, self.lr_scheduler)

@@ -2,10 +2,20 @@ import torch
 import torch.nn as nn
 import math
 
-def mse_loss(output, target):
+def load_loss_fn(train_cfg):
+    if train_cfg.loss_fn == 'mape':
+        return mape_loss
+    else:
+        raise NotImplementedError()
+    
+def mape_loss(output, target):
 
-    loss_fn = nn.MSELoss(reduction='none')
-    loss = torch.sqrt(loss_fn(output, target)) / (target + 1e-3)
+    # loss_fn = nn.MSELoss(reduction='none')
+    # loss = torch.sqrt(loss_fn(output, target) + 1e-5) / (target + 1e-5)
+    # loss = torch.mean(loss)
+
+    loss_fn = nn.L1Loss(reduction='none')
+    loss = loss_fn(output, target) / (target + 1e-5)
     loss = torch.mean(loss)
 
     return loss

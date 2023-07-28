@@ -18,10 +18,16 @@ def set_seeds(seed):
     torch.cuda.manual_seed_all(seed)
 
 def get_device():
-    "get device (CPU or GPU)"
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    n_gpu = torch.cuda.device_count()
-    print("%s (%d GPUs)" % (device, n_gpu))
+    # if torch.backends.mps.is_available():
+    #     str_device = 'mps' 
+    if torch.cuda.is_available():
+        str_device = 'cuda'
+    else:
+        str_device = 'cpu'
+        
+    device = torch.device(str_device)
+
+    print(f'Using {device}')
     return device
 
 def split_last(x, shape):
@@ -91,3 +97,11 @@ def get_logger(name, log_path):
     logger.setLevel(logging.DEBUG)
     return logger
 
+def correct_regression(pred, answer, tolerance):
+    if isinstance(pred, list):
+        pred = torch.tensor(pred)
+    if isinstance(answer, list):
+        answer = torch.tensor(answer)
+
+    percentage = abs(pred - answer) * 100.0 / (answer + 1e-3)
+    return sum(percentage < tolerance)

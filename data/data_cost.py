@@ -21,7 +21,7 @@ import utilities as ut
 
 
 class DataItem:
-    def __init__(self, x, y, block, code_id, pad_idx):
+    def __init__(self, x, y, block, code_id):
         self.x = x
         self.y = y
         self.block = block
@@ -46,6 +46,7 @@ class DataInstructionEmbedding(Data):
         (self.token_to_hot_idx, self.hot_idx_to_token) = params
 
     def prepare_data(self, progress=True, fixed=False):
+        # long_tmp = []
         def hot_idxify(elem):
             if elem not in self.token_to_hot_idx:
                 if fixed:
@@ -124,11 +125,95 @@ class DataInstructionEmbedding(Data):
 
             block = ut.BasicBlock(instrs)
             block.create_dependencies()
-            datum = DataItem(raw_instrs, timing, block, code_id, self.pad_idx)
+            datum = DataItem(raw_instrs, timing, block, code_id)
+
+            # if len(datum.x) > 512:
+            #     long_tmp.append(datum)
+            # else:
             self.data.append(datum)
             self.raw.append(readable_raw)
 
-def load_dataset(data_savefile, small_size=False):
+        # print('long data: ', len(long_tmp))
+        # self.data.extend(long_tmp)
+
+    def prepare_stacked_data(self, progress=True, fixed=False):
+        def hot_idxify(elem):
+            if elem not in self.token_to_hot_idx:
+                if fixed:
+                    # TODO: this would be a good place to implement UNK tokens
+                    raise ValueError('Ithemal does not yet support UNK tokens!')
+                self.token_to_hot_idx[elem] = len(self.token_to_hot_idx)
+                self.hot_idx_to_token[self.token_to_hot_idx[elem]] = elem
+            return self.token_to_hot_idx[elem]
+        self.pad_idx = hot_idxify('<PAD>')
+
+        if progress:
+            iterator = tqdm(self.raw_data)
+        else:
+            iterator = self.raw_data
+
+        for (code_id, timing, code_intel, code_xml) in iterator:
+            
+            #if timing > 1112:#1000:
+            #    continue
+
+            block_root = ET.fromstring(code_xml)
+            instrs = []
+            raw_instrs = []
+            curr_mem = self.mem_start
+            for _ in range(1): # repeat for duplicated blocks
+                # handle missing or incomplete code_intel
+                split_code_intel = itertools.chain((code_intel or '').split('\n'), itertools.repeat(''))
+                for (instr, m_code_intel) in zip(block_root, split_code_intel):
+                    raw_instr = []
+                    opcode = int(instr.find('opcode').text)
+                    raw_instr.extend([opcode, '<SRCS>'])
+                    #raw_instr.append(opcode)
+                    srcs = []
+                    for src in instr.find('srcs'):
+                        if src.find('mem') is not None:
+                            raw_instr.append('<MEM>')
+                            for mem_op in src.find('mem'):
+                                raw_instr.append(int(mem_op.text))
+                                srcs.append(int(mem_op.text))
+                            raw_instr.append('</MEM>')
+                            srcs.append(curr_mem)
+                            curr_mem += 1
+                        else:
+                            raw_instr.append(int(src.text))
+                            srcs.append(int(src.text))
+
+                    raw_instr.append('<DSTS>')
+                    dsts = []
+                    for dst in instr.find('dsts'):
+                        if dst.find('mem') is not None:
+                            raw_instr.append('<MEM>')
+                            for mem_op in dst.find('mem'):
+                                raw_instr.append(int(mem_op.text))
+                                # operands used to calculate dst mem ops are sources
+                                srcs.append(int(mem_op.text))
+                            raw_instr.append('</MEM>')
+                            dsts.append(curr_mem)
+                            curr_mem += 1
+                        else:
+                            raw_instr.append(int(dst.text))
+                            dsts.append(int(dst.text))
+
+                    raw_instr.append('<END>')
+                    raw_instrs.append(list(map(hot_idxify, raw_instr)))
+                    instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
+                    instrs[-1].intel = m_code_intel
+            if len(raw_instrs) > 400:
+                #print(len(raw_instrs))
+                continue
+
+            block = ut.BasicBlock(instrs)
+            block.create_dependencies()
+            datum = DataItem(raw_instrs, timing, block, code_id)
+            self.data.append(datum)
+
+
+def load_dataset(data_savefile, small_size=False, stacked=False):
     data = DataInstructionEmbedding()
 
     if small_size:
@@ -136,7 +221,12 @@ def load_dataset(data_savefile, small_size=False):
     else:
         data.raw_data = torch.load(data_savefile)
     data.read_meta_data()
-    data.prepare_data()
+
+    if stacked:
+        data.prepare_stacked_data()
+    else:
+        data.prepare_data()
+        
     data.generate_datasets()
 
     return data

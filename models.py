@@ -14,9 +14,21 @@ import torch.nn.functional as F
 
 from utils import split_last, merge_last, get_device
 
+def load_model(model_cfg):
+    model = None
+    if model_cfg.model_class == 'DeepPM':
+        model = DeepPM
+    elif model_cfg.model_class == 'StackedDeepPM':
+        model = StackedDeepPM
+    else:
+        raise NotImplementedError()
+    
+    return model(model_cfg)
+
 
 class Config(NamedTuple):
     "Configuration for BERT model"
+    model_class: str = None
     vocab_size: int = None # Size of Vocabulary
     dim: int = 768 # Dimension of Hidden Layer in Transformer Encoder
     n_layers: int = 12 # Numher of Hidden Layers
@@ -230,29 +242,27 @@ class DeepPM(nn.Module):
         super().__init__()
 
 
-        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=get_device(),
+        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=get_device(), dim_feedforward=cfg.dim_ff,
                                             batch_first=True)
-        self.blocks = nn.TransformerEncoder(block, cfg.n_layers)
+        self.blocks = nn.TransformerEncoder(block, cfg.n_layers, enable_nested_tensor=False)
 
         self.pad_idx = cfg.pad_idx
         self.embed = nn.Embedding(cfg.vocab_size, cfg.dim, padding_idx = cfg.pad_idx,
                                 dtype=torch.float32, device=get_device()) # token embedding
-        self.pos_embed = PositionalEncoding(cfg.dim, cfg.max_len).to(get_device())
-        self.prediction = nn.Linear(cfg.dim, 1, dtype=torch.float32)
+        self.pos_embed = PositionalEncoding(cfg.dim, 4000).to(get_device())
+        self.prediction = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(cfg.dim, 1, dtype=torch.float32)
+        )
        
     def forward(self, item):
         padding_mask = (item == self.pad_idx)
         t_output = self.embed(item)
-        # print(t_output.size())
         t_output = self.pos_embed(t_output)
-        # print(t_output.size())
 
         # batch_size, n_instr, n_dim = t_output.size()
 
         # B, L, D
-        # print(t_output.dtype)
-        # print(f't_output: {t_output.shape}  mask: {padding_mask.shape}')
-        # print()
         t_output = self.blocks(t_output, src_key_padding_mask=padding_mask)
 
         t_output = t_output[:, 0, :]
@@ -260,4 +270,102 @@ class DeepPM(nn.Module):
 
         return out
             
+class PalmDeepPM(nn.Module):
+    """DeepPM model with Trasformer """
+    def __init__(self, cfg):
+        super().__init__()
 
+
+        self.larger = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(128, cfg.dim, dtype=torch.float32)
+        )
+
+        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=get_device(),
+                                            batch_first=True)
+        self.blocks = nn.TransformerEncoder(block, cfg.n_layers)
+
+        self.pos_embed = PositionalEncoding(cfg.dim, 500).to(get_device())
+        self.prediction = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(cfg.dim, 1, dtype=torch.float32)
+        )
+       
+    def forward(self, x, mask):
+        t_output = self.larger(x)
+
+        t_output = self.blocks(t_output, src_key_padding_mask=mask)
+
+        t_output = t_output[:, 0, :]
+        out = self.prediction(t_output).squeeze(1)
+
+        return out
+            
+
+
+class StackedDeepPM(nn.Module):
+    """DeepPM model with Trasformer """
+    def __init__(self, cfg):
+        super().__init__()
+
+        device = get_device()
+        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
+                                            batch_first=True)
+        self.f_block = nn.TransformerEncoder(block, 2, enable_nested_tensor=False)
+
+        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
+                                            batch_first=True)
+        self.s_block = nn.TransformerEncoder(block, 2, enable_nested_tensor=False)
+
+        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
+                                            batch_first=True)
+        self.t_block = nn.TransformerEncoder(block, 4, enable_nested_tensor=False)
+
+
+        self.pad_idx = cfg.pad_idx
+        self.embed = nn.Embedding(cfg.vocab_size, cfg.dim, padding_idx = cfg.pad_idx,
+                                dtype=torch.float32, device=device) # token embedding
+        self.pos_embed = PositionalEncoding(cfg.dim, 400).to(device)
+        self.prediction = nn.Sequential(
+            nn.Dropout(),
+            nn.Linear(cfg.dim, 1, dtype=torch.float32)
+        )
+       
+    def forward(self, x, debug=False):
+        mask = x == self.pad_idx
+
+        t_output = self.embed(x)
+        batch_size, inst_size, seq_size, dim = t_output.shape
+
+        t_output = t_output.view(batch_size * inst_size, seq_size, dim)
+        t_output = self.pos_embed(t_output)
+
+        t_output = t_output.view(batch_size, inst_size * seq_size, dim)
+        mask = mask.view(batch_size, inst_size * seq_size)
+
+        t_output = self.f_block(t_output, src_key_padding_mask=mask)
+        t_output = t_output.view(batch_size * inst_size, seq_size, dim)
+        mask = mask.view(batch_size * inst_size, seq_size)
+
+        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 1)
+
+        mod_mask = mask.masked_fill(mask.all(dim=-1).unsqueeze(-1), False)
+
+        t_output = self.s_block(t_output, src_key_padding_mask=mod_mask)
+        
+
+        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 0)
+
+        t_output = t_output[:,0,:]
+        t_output = t_output.view(batch_size, inst_size, dim)
+        i_output = self.pos_embed(t_output)
+        del t_output
+
+        mask = mask.view(batch_size, inst_size, seq_size)
+        mask = mask.all(dim=-1)
+
+        i_output = self.t_block(i_output, src_key_padding_mask=mask)
+        i_output = i_output.sum(dim = 1)
+        out = self.prediction(i_output).squeeze(1)
+
+        return out
