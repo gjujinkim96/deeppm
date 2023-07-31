@@ -18,7 +18,7 @@ from torch.utils.data import DataLoader
 import multiprocessing
 import pandas as pd
 from operator import itemgetter
-from utils import correct_regression
+from utils import correct_regression, seed_worker, get_worker_generator
 # import plotting
 
 
@@ -32,10 +32,13 @@ class Config(NamedTuple):
     batch_size: int = 32
     val_batch_size: int = 32
     lr: int = 5e-5 # learning rate
+    lr_total_iters: int = 5
     n_epochs: int = 10 # the number of epoch
     # `warm up` period = warmup(0.1)*total_steps
     # linearly increasing learning rate from zero to the specified value(5e-5)
     warmup: float = 0.001
+    checkpoint: bool = False
+    raw_data: bool = False
     
     #save_steps: int = 100 # interval for saving model
     #total_steps: int = 100000 # total number of steps to train
@@ -162,6 +165,7 @@ class Trainer(object):
         self.clip_grad_norm = train_cfg.clip_grad_norm
         self.small_training = small_training
         self.cpu_count = multiprocessing.cpu_count()
+        self.seed = train_cfg.seed
 
     def print_final(self, f, x, y):
         if x.shape != ():
@@ -194,12 +198,31 @@ class Trainer(object):
             self.loss_sum += other.loss_sum
             return self
 
+    def run_ithemal(self, datum, answers, predictions, is_train, loss_mod=None):
+        output = self.model(datum)
+
+        y = torch.tensor(datum.y)
+        loss = self.loss_fn(output, y)
+        if loss_mod is not None:
+            loss *= loss_mod
+
+        answers.append(datum.y)
+        predictions.append(output.item())
+
+        if is_train:
+            loss.backward()
+        return loss.item()
 
     def run_model(self, x, y, answers, predictions, is_train, loss_mod=None):
         x = x.to(self.device)
         y = y.to(self.device)
 
-        output = self.model(x)
+
+        if is_train and self.train_cfg.checkpoint:
+            output = self.model.checkpoint_forward(x)
+        else:
+            output = self.model(x)
+
         loss = self.loss_fn(output, y)
         if loss_mod is not None:
             loss *= loss_mod
@@ -213,32 +236,42 @@ class Trainer(object):
         return loss.item()
 
     def run_batch(self, batch, is_train=False):
-        short_x, short_y, long_x, long_y, short_inst_len, long_inst_len = \
-            itemgetter('short_x', 'short_y', 'long_x', 'long_y', 'short_inst_len', 'long_inst_len')(batch)
+        if self.train_cfg.raw_data:
+            result = self.BatchResult()
+            result.batch_len = len(batch)
+            result.inst_lens = [datum.block.num_instrs() for datum in batch]
+            for datum in batch:
+                result.loss += self.run_ithemal(datum, result.measured, result.prediction, is_train, 1/result.batch_len)
+                    
+            result.loss_sum = result.loss * result.batch_len
+            return result
+        else:
+            short_x, short_y, long_x, long_y, short_inst_len, long_inst_len = \
+                itemgetter('short_x', 'short_y', 'long_x', 'long_y', 'short_inst_len', 'long_inst_len')(batch)
 
-        result = self.BatchResult()
-        short_len = len(short_y)
-        long_len = len(long_y)
-        result.batch_len = short_len + long_len
-        result.inst_lens = short_inst_len + long_inst_len
+            result = self.BatchResult()
+            short_len = len(short_y)
+            long_len = len(long_y)
+            result.batch_len = short_len + long_len
+            result.inst_lens = short_inst_len + long_inst_len
+            
+            if short_len > 0:
+                loss_mod = None
+                if long_len > 0:
+                    loss_mod = short_len / result.batch_len
 
-        if short_len > 0:
-            loss_mod = None
+                result.loss += self.run_model(short_x, short_y, 
+                                result.measured, result.prediction,
+                                is_train, loss_mod)
+            
             if long_len > 0:
-                loss_mod = short_len / result.batch_len
-
-            result.loss += self.run_model(short_x, short_y, 
-                            result.measured, result.prediction,
-                            is_train, loss_mod)
-        
-        if long_len > 0:
-            for x, y in zip(long_x, long_y):
-                result.loss += self.run_model(x.unsqueeze(0), torch.tensor(y).unsqueeze(0),
-                                              result.measured, result.prediction,
-                                              is_train, 1/result.batch_len)
-        
-        result.loss_sum = result.loss * result.batch_len
-        return result
+                for x, y in zip(long_x, long_y):
+                    result.loss += self.run_model(x.unsqueeze(0), torch.tensor(y).unsqueeze(0),
+                                                result.measured, result.prediction,
+                                                is_train, 1/result.batch_len)
+            
+            result.loss_sum = result.loss * result.batch_len
+            return result
     
     def validate(self, resultfile, epoch):
         self.model.eval()
@@ -246,8 +279,9 @@ class Trainer(object):
 
         f = open(resultfile,'w')
 
+        cfn = self.test_ds.raw_collate_fn if self.train_cfg.raw_data else self.test_ds.block_collate_fn 
         loader = DataLoader(self.test_ds, shuffle=False, num_workers=self.cpu_count,
-            batch_size=self.train_cfg.val_batch_size, collate_fn=self.test_ds.block_collate_fn)
+            batch_size=self.train_cfg.val_batch_size, collate_fn=cfn)
         epoch_result = self.BatchResult()
 
         with torch.no_grad():
@@ -267,12 +301,15 @@ class Trainer(object):
 
     def train(self):
         """ Train Loop """
+        generator = get_worker_generator(self.seed)
         resultfile = os.path.join(self.expt.experiment_root_path(), 'validation_results.txt')
 
         self.model.to(self.device)
 
+        cfn = self.train_ds.raw_collate_fn if self.train_cfg.raw_data else self.train_ds.block_collate_fn 
         loader = DataLoader(self.train_ds, shuffle=True, num_workers=self.cpu_count, 
-                        batch_size=self.train_cfg.batch_size, collate_fn=self.train_ds.block_collate_fn)
+                        batch_size=self.train_cfg.batch_size, collate_fn=cfn,
+                        worker_init_fn=seed_worker, generator=generator) 
         epoch_len = len(loader)
 
         # with autograd.detect_anomaly(True):

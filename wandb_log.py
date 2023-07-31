@@ -4,7 +4,7 @@ import pandas as pd
 
 def wandb_init(args, model_cfg, train_cfg, train_data_len):
     mode = 'disabled' if args.wandb_disabled else 'online'
-    wandb.init(
+    run = wandb.init(
         project='deeppm',
         config={
             "model_class": model_cfg.model_class,
@@ -20,18 +20,31 @@ def wandb_init(args, model_cfg, train_cfg, train_data_len):
             "batch_size": train_cfg.batch_size,
             "val_batch_size": train_cfg.val_batch_size,
             "lr": train_cfg.lr,
+            "lr_total_iters": train_cfg.lr_total_iters,
             "n_epochs": train_cfg.n_epochs,
             "lr_scheduler": train_cfg.lr_scheduler,
             "optimizer": train_cfg.optimizer,
             "loss_fn": train_cfg.loss_fn,
+            "checkpoint": train_cfg.checkpoint,
+            'raw_data': train_cfg.raw_data,
 
             "small_size": args.small_size,
             "small_training": args.small_training,
 
             "steps_per_epoch": (train_data_len + train_cfg.batch_size - 1) // train_cfg.batch_size,
         },
+        # settings=wandb.Settings(code_dir="., "),
         mode=mode,
+        name=args.experiment_name,
+        tags=['sum_zero'],
     )
+
+    run.log_code(include_fn=lambda path: path.endswith(".py") or path.endswith(".sh") or path.endswith(".json"))
+
+
+    wandb.define_metric("loss/Validation", summary="min")
+    wandb.define_metric("val/correct/Threshold 25", summary="max")
+
 
 
 def wandb_finish():
@@ -59,13 +72,13 @@ def wandb_log_val(er, epoch):
         'predicted': er.prediction,
         'measured': er.measured,
         'inst_lens': er.inst_lens,
-        'epoch': epoch,
     })
 
     df['mape'] = abs(df.predicted - df.measured) * 100 / (df.measured + 1e-5)
 
     logging_dict = {
         "loss/Validation": er.loss,
+        'epoch': epoch,
     }
 
     # print(len(er.prediction), len(er.measured))

@@ -11,6 +11,10 @@ class Experiment(object):
         self.name = name
         self.time = time
 
+    def check_root_exist(self):
+        return os.path.isdir(self.experiment_root_path())
+        
+
     def experiment_root_path(self):
         # type: () -> str
         return os.path.join(HOME, 'saved', self.name, self.time)

@@ -3,12 +3,15 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 
 def load_dataset(data, train_cfg, model_cfg):
-    if model_cfg.stacked:
+    if train_cfg.raw_data or not model_cfg.stacked:
+        train_ds = BasicBlockDataset(data.train, model_cfg)
+        test_ds = BasicBlockDataset(data.test, model_cfg)
+    elif model_cfg.stacked:
         train_ds = StackedBlockDataset(data.train, model_cfg)
         test_ds = StackedBlockDataset(data.train, model_cfg)
     else:
-        train_ds = BasicBlockDataset(data.train, model_cfg)
-        test_ds = BasicBlockDataset(data.test, model_cfg)
+        raise NotImplementedError()
+        
     return train_ds, test_ds
 
 class BasicBlockDataset(Dataset):
@@ -22,6 +25,9 @@ class BasicBlockDataset(Dataset):
     
     def __getitem__(self, index):
         return self.embeddings[index]
+    
+    def raw_collate_fn(self, batch):
+        return batch
     
     def block_collate_fn(self, batch):
         short_max_len = 0
@@ -109,17 +115,18 @@ class StackedBlockDataset(Dataset):
                 long_y.append(y)
                 long_inst_len.append(inst_len)
 
-        max_shape = torch.stack(
-                [torch.tensor(x.shape) for x in short_x]
-            ).max(dim=0)[0]
-        
-        short_x = torch.stack([
-            F.pad(tensor, 
-                  (0, max_shape[1]-tensor.size(1), 0, max_shape[0]-tensor.size(0)), value=self.pad_idx)
-            for tensor in short_x
-        ])
+        if len(short_x) > 0:
+            max_shape = torch.stack(
+                    [torch.tensor(x.shape) for x in short_x]
+                ).max(dim=0)[0]
+            
+            short_x = torch.stack([
+                F.pad(tensor, 
+                    (0, max_shape[1]-tensor.size(1), 0, max_shape[0]-tensor.size(0)), value=self.pad_idx)
+                for tensor in short_x
+            ])
 
-        short_y = torch.tensor(short_y)
+            short_y = torch.tensor(short_y)
 
         return {
             'short_x': short_x,
