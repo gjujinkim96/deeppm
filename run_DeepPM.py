@@ -31,12 +31,16 @@ def main():
     parser.add_argument('--wandb_disabled', required=False, action='store_true', help='For turning of wandb logging')
     parser.add_argument('--exp_override', required=False, action='store_true', help='For overriding run')
     parser.add_argument('--model_class', required=False, help='For overriding model_class in model_cfg')
+    parser.add_argument('--lr_scheduler', required=False, help='For overriding lr_scheduler in train_cfg')
     parser.add_argument('--lr', required=False, help='For overriding lr in train_cfg')
+    parser.add_argument('--batch_size', required=False, help='For overriding batch_size in train_cfg')
+    parser.add_argument('--val_batch_size', required=False, help='For overriding val_batch_size in train_cfg')
     parser.add_argument('--clip_grad_norm', required=False, help='For overriding clip_grad_norm in train_cfg')
     parser.add_argument('--n_epochs', required=False, help='For overriding n_epochs in train_cfg')
     parser.add_argument('--checkpoint', required=False, action='store_true', help='For overriding whether to use checkpoint')
     parser.add_argument('--max_len', required=False, help='For overriding max_Len')
     parser.add_argument('--raw_data', required=False, action='store_true', help='For overriding raw_data')
+    parser.add_argument('--only_not_unique', required=False, action='store_true', help='For overriding only_unique')
 
     args = parser.parse_args()
 
@@ -45,6 +49,12 @@ def main():
     train_cfg = train.Config.from_json(args.train_cfg)
     if args.lr is not None:
         train_cfg = train_cfg._replace(lr = float(args.lr))
+    if args.lr_scheduler is not None:
+        train_cfg = train_cfg._replace(lr_scheduler = args.lr_scheduler)
+    if args.batch_size is not None:
+        train_cfg = train_cfg._replace(batch_size = int(args.batch_size))
+    if args.val_batch_size is not None:
+        train_cfg = train_cfg._replace(val_batch_size = int(args.val_batch_size))
     if args.clip_grad_norm is not None:
         train_cfg = train_cfg._replace(clip_grad_norm = float(args.clip_grad_norm))
     if args.n_epochs is not None:
@@ -66,6 +76,8 @@ def main():
         model_cfg = model_cfg._replace(model_class = args.model_class)
     if args.max_len is not None:
         model_cfg = model_cfg._replace(max_len = int(args.max_len))
+    if args.only_not_unique is not None:
+        model_cfg = model_cfg._replace(only_unique = False)
 
     expt = Experiment(args.experiment_name, args.experiment_time)
     if expt.check_root_exist() and not args.exp_override:

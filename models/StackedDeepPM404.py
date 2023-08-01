@@ -4,7 +4,7 @@ from utils import get_device
 
 from .pos_encoder import get_positional_encoding_1d
 
-class StackedDeepPM080(nn.Module):
+class StackedDeepPM404(nn.Module):
     """DeepPM model with Trasformer """
     def __init__(self, cfg):
         super().__init__()
@@ -12,8 +12,11 @@ class StackedDeepPM080(nn.Module):
         device = get_device(should_print=False)
         block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
                                             batch_first=True)
-        self.s_block = nn.TransformerEncoder(block, 8, enable_nested_tensor=False)
+        self.f_block = nn.TransformerEncoder(block, 4, enable_nested_tensor=False)
 
+        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
+                                            batch_first=True)
+        self.t_block = nn.TransformerEncoder(block, 4, enable_nested_tensor=False)
 
 
         self.pad_idx = cfg.pad_idx
@@ -34,24 +37,23 @@ class StackedDeepPM080(nn.Module):
         t_output = t_output.view(batch_size * inst_size, seq_size, dim)
         t_output = self.pos_embed(t_output)
 
-        mask = mask.view(batch_size * inst_size, seq_size)
+        t_output = t_output.view(batch_size, inst_size * seq_size, dim)
+        mask = mask.view(batch_size, inst_size * seq_size)
 
-        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 1)
+        t_output = self.f_block(t_output, src_key_padding_mask=mask)
 
-        mod_mask = mask.masked_fill(mask.all(dim=-1).unsqueeze(-1), False)
+        t_output = t_output.view(batch_size, inst_size, seq_size, dim)
+        t_output = t_output[:, :, 0,:]
+        i_output = self.pos_embed(t_output)
+        del t_output
 
-        t_output = self.s_block(t_output, src_key_padding_mask=mod_mask)
-        
-
-        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 0)
-
-
-        t_output = t_output[:,0,:]
-        t_output = t_output.view(batch_size, inst_size, dim)
         mask = mask.view(batch_size, inst_size, seq_size)
-        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1), 0)
-        t_output = t_output.sum(dim=1)
-        out = self.prediction(t_output).squeeze(1)
+        mask = mask.all(dim=-1)
+
+        i_output = self.t_block(i_output, src_key_padding_mask=mask)
+        i_output = i_output.masked_fill(mask.unsqueeze(-1), 0)
+        i_output = i_output.sum(dim = 1)
+        out = self.prediction(i_output).squeeze(1)
 
         return out
     

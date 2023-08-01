@@ -1,20 +1,31 @@
 
 
-python run_DeepPM.py --data training_data/intel_core.data \
-    --train_cfg config/DeepPM_train.json \
-    --model_cfg config/DeepPM_model.json \
-    --experiment-name ithemal \
-    --experiment-time 0702 \
-    --model_class Ithemal \
-    --raw_data 
-
+# python run_DeepPM.py --data training_data/intel_core.data \
+#     --train_cfg config/DeepPM_train.json \
+#     --model_cfg config/DeepPM_model.json \
+#     --experiment-name ithemal \
+#     --experiment-time 0702 \
+#     --model_class Ithemal \
+#     --raw_data 
 
 # python run_DeepPM.py --data training_data/intel_core.data \
 #     --train_cfg config/DeepPM_train.json \
 #     --model_cfg config/DeepPM_model.json \
-#     --experiment-name 008 \
+#     --experiment-name batch_ithemal_lr:0.1 \
 #     --experiment-time 0702 \
-#     --model_class StackedDeepPM008
+#     --lr 0.1 \
+#     --batch_size 32 \
+#     --val_batch_size 32 \
+#     --clip_grad_norm 2 \
+#     --lr_scheduler StepLR \
+#     --model_class BatchIthemal
+
+# python run_DeepPM.py --data training_data/intel_core.data \
+#     --train_cfg config/DeepPM_train.json \
+#     --model_cfg config/DeepPM_model.json \
+#     --experiment-name bi_fix \
+#     --experiment-time 0702 \
+#     --model_class BatchIthemal
 
 # python run_DeepPM.py --data training_data/intel_core.data \
 #     --train_cfg config/DeepPM_train.json \
@@ -26,21 +37,19 @@ python run_DeepPM.py --data training_data/intel_core.data \
 # python run_DeepPM.py --data training_data/intel_core.data \
 #     --train_cfg config/DeepPM_train.json \
 #     --model_cfg config/DeepPM_model.json \
-#     --experiment-name 044 \
+#     --experiment-name 404 \
 #     --experiment-time 0702 \
-#     --model_class StackedDeepPM044
+#     --model_class StackedDeepPM404
+
+python run_DeepPM.py --data training_data/intel_core.data \
+    --train_cfg config/DeepPM_train.json \
+    --model_cfg config/DeepPM_model.json \
+    --experiment-name 044 \
+    --experiment-time 0702 \
+    --model_class StackedDeepPM044
 
 
 
-
-# python run_DeepPM.py --data training_data/intel_core.data \
-#     --train_cfg config/DeepPM_train.json \
-#     --model_cfg config/DeepPM_model.json \
-#     --experiment-name 800 \
-#     --experiment-time 0702 \
-#     --model_class StackedDeepPM800 \
-#     --exp_override \
-#     --checkpoint
 
 # python run_DeepPM.py --data training_data/intel_core.data \
 #     --train_cfg config/DeepPM_train.json \

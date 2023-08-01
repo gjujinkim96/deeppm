@@ -353,6 +353,7 @@ RnnParameters = NamedTuple('RnnParameters', [
     ('learn_init', bool),
     ('hierarchy_type', RnnHierarchyType),
     ('rnn_type', RnnType),
+    ('pad_idx', int)
 ])
 
 
@@ -503,3 +504,108 @@ class Fasthemal(AbstractGraphModule):
 
         return self.linear(instr_state[0].squeeze()).squeeze()
 
+def get_last_false_values(x, mask, dim):
+    broadcast_shape = list(x.shape)
+    broadcast_shape[dim] = 1
+
+    indices = torch.argmax(mask.to(torch.int), dim=dim, keepdim=True)
+    indices = indices.masked_fill(indices == 0, mask.size(dim))
+    indices = indices - 1
+    # indices == 0 if only it is just padding sequence or there is no padding
+    #  if all padding just index does not matter
+    
+    br = torch.broadcast_to(indices.unsqueeze(-1), broadcast_shape)
+    output = torch.gather(x, dim, br)
+    return output.squeeze(dim)
+
+class BatchRNN(AbstractGraphModule):
+
+    def __init__(self, params):
+        # type: (RnnParameters) -> None
+        super(BatchRNN, self).__init__(params.embedding_size, params.hidden_size, params.num_classes)
+
+        self.params = params
+        self.token_rnn = nn.LSTM(self.embedding_size, self.hidden_size, batch_first=True)
+        self.instr_rnn = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True)
+        self.token_rnn.to(device)
+        self.instr_rnn.to(device)
+        
+        self._token_init = self.rnn_init_hidden()
+        self._instr_init = self.rnn_init_hidden()
+
+        self.linear = nn.Linear(self.hidden_size, self.num_classes)
+
+    def rnn_init_hidden(self):
+        # type: () -> Union[Tuple[nn.Parameter, nn.Parameter], nn.Parameter]
+
+        hidden = self.init_hidden()
+
+        # for h in hidden:
+        #     torch.nn.init.kaiming_uniform_(h)
+
+        if self.params.rnn_type == RnnType.LSTM:
+            return hidden
+        else:
+            return hidden[0]
+
+    def get_token_init(self):
+        # type: () -> torch.tensor
+        if self.params.learn_init:
+            return self._token_init
+        else:
+            return self.rnn_init_hidden()
+
+    def get_instr_init(self):
+        # type: () -> torch.tensor
+        if self.params.learn_init:
+            return self._instr_init
+        else:
+            return self.rnn_init_hidden()
+
+    def pred_of_instr_chain(self, instr_chain):
+        # type: (torch.tensor) -> torch.tensor
+        _, final_state_packed = self.instr_rnn(instr_chain, self.get_instr_init())
+        if self.params.rnn_type == RnnType.LSTM:
+            final_state = final_state_packed[0]
+        else:
+            final_state = final_state_packed
+        return self.linear(final_state.squeeze()).squeeze()
+
+
+    
+    def forward(self, x):
+        # mask = B I S
+        # x = B I S
+        
+        mask = x == self.params.pad_idx
+
+        batch_size, inst_size, seq_size = x.shape
+
+        #  tokens = B I S HID
+        tokens = self.final_embeddings(x)
+
+        #  B*I S HID
+        tokens = tokens.view(batch_size * inst_size, seq_size, -1)
+
+        # output = B*I S HID
+        output, _ = self.token_rnn(tokens)
+        
+        #  B I S HID
+        output = output.view(batch_size, inst_size, seq_size, -1)
+
+        #  B I HID
+        instr_chain = get_last_false_values(output, mask, dim=2)
+
+        #  B I HID
+        inst_output, _ = self.instr_rnn(instr_chain)
+
+        #  B I
+        mask = mask.all(dim=-1)
+
+        #  B HID
+        final_state = get_last_false_values(inst_output, mask, dim=1)
+        
+        #  B
+        output = self.linear(final_state).squeeze(-1)
+        return output
+    

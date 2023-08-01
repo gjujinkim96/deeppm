@@ -65,6 +65,7 @@ class InstBlockOp(nn.Module):
         t_output = self.t_block(t_output, src_key_padding_mask=mask)
 
         # pred
+        t_output = t_output.masked_fill(mask.unsqueeze(-1), 0)
         t_output = t_output.sum(dim = 1)
         out = self.prediction(t_output).squeeze(-1)
         return out

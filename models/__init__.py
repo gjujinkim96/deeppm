@@ -11,8 +11,9 @@ from .StackedDeepPM008 import StackedDeepPM008
 from .StackedDeepPM800 import StackedDeepPM800
 from .StackedDeepPM080 import StackedDeepPM080
 from .StackedDeepPM440 import StackedDeepPM440
+from .StackedDeepPM404 import StackedDeepPM404
 from .StackedDeepPMPadZero import StackedDeepPMPadZero
-from .Ithemal import RNN, RnnParameters, RnnHierarchyType, RnnType
+from .Ithemal import RNN, RnnParameters, RnnHierarchyType, RnnType, BatchRNN
 
 def load_model(model_cfg):
     model = None
@@ -38,6 +39,8 @@ def load_model(model_cfg):
         model = StackedDeepPM080
     elif model_cfg.model_class == 'StackedDeepPM440':
         model = StackedDeepPM440
+    elif model_cfg.model_class == 'StackedDeepPM404':
+        model = StackedDeepPM404
     elif model_cfg.model_class == 'StackedDeepPMPadZero':
         model = StackedDeepPMPadZero
     elif model_cfg.model_class == 'Ithemal':
@@ -51,9 +54,26 @@ def load_model(model_cfg):
             hierarchy_type=RnnHierarchyType.MULTISCALE,
             rnn_type=RnnType.LSTM,
             learn_init=False,
+            pad_idx=model_cfg.pad_idx,
         )
         md = RNN(rnn_params)
-        md.set_learnable_embedding(mode='none', dictsize=628)
+        md.set_learnable_embedding(mode='none', dictsize=model_cfg.vocab_size)
+        return md
+    elif model_cfg.model_class == 'BatchIthemal':
+        # model = 
+        rnn_params = RnnParameters(
+            embedding_size=512,
+            hidden_size=512,
+            num_classes=1,
+            connect_tokens=False,
+            skip_connections=False,
+            hierarchy_type=RnnHierarchyType.MULTISCALE,
+            rnn_type=RnnType.LSTM,
+            learn_init=False,
+            pad_idx=model_cfg.pad_idx,
+        )
+        md = BatchRNN(rnn_params)
+        md.set_learnable_embedding(mode='none', dictsize=model_cfg.vocab_size)
         return md
     else:
         raise NotImplementedError()
