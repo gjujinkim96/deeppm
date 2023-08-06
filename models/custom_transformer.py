@@ -118,7 +118,7 @@ class MultiHeadedSelfAttention(nn.Module):
             for j in range(s):
                 if i<j: masking[i][j] = (s+i-j)/s
                 else: masking[i][j] = (s-i+j)/s
-        masking = torch.Tensor(masking).cuda()
+        masking = torch.tensor(masking, device=scores.device, dtype=torch.float)
         scores = scores * masking
 
         del masking

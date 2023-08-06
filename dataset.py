@@ -8,10 +8,11 @@ def load_dataset(data, train_cfg, model_cfg):
         test_ds = BasicBlockDataset(data.test, model_cfg)
     elif model_cfg.stacked:
         train_ds = StackedBlockDataset(data.train, model_cfg)
-        test_ds = StackedBlockDataset(data.train, model_cfg)
+        test_ds = StackedBlockDataset(data.test, model_cfg)
     else:
         raise NotImplementedError()
         
+    print(f'Train Dataset: {len(train_ds)}  Test Dataset: {len(test_ds)}')
     return train_ds, test_ds
 
 class BasicBlockDataset(Dataset):

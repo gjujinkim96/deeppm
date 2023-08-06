@@ -161,6 +161,12 @@ class Instruction:
 
     def is_idempotent(self):
         return len(set(self.srcs) & set(self.dsts)) == 0
+    
+    def __hash__(self):
+        return hash(str(self))
+
+    def __eq__(self, other):
+        return str(self) == str(other)
 
 class InstructionReplacer(object):
     def __init__(self, regexp_intel, replacement_intel,

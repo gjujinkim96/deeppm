@@ -13,7 +13,10 @@ from .StackedDeepPM080 import StackedDeepPM080
 from .StackedDeepPM440 import StackedDeepPM440
 from .StackedDeepPM404 import StackedDeepPM404
 from .StackedDeepPMPadZero import StackedDeepPMPadZero
-from .Ithemal import RNN, RnnParameters, RnnHierarchyType, RnnType, BatchRNN
+from .DeepPMOriginal import DeepPMOriginal
+from .Ithemal import RNN, RnnParameters, RnnHierarchyType, RnnType, BatchRNN, BatchRNN2
+from .OpSrcDest import OpSrcDest
+from .SimpleSum import SimpleSum
 
 def load_model(model_cfg):
     model = None
@@ -43,6 +46,12 @@ def load_model(model_cfg):
         model = StackedDeepPM404
     elif model_cfg.model_class == 'StackedDeepPMPadZero':
         model = StackedDeepPMPadZero
+    elif model_cfg.model_class == 'OpSrcDest':
+        model = OpSrcDest
+    elif model_cfg.model_class == 'DeepPMOriginal':
+        model = DeepPMOriginal
+    elif model_cfg.model_class == 'SimpleSum':
+        model = SimpleSum
     elif model_cfg.model_class == 'Ithemal':
         # model = 
         rnn_params = RnnParameters(
@@ -62,8 +71,8 @@ def load_model(model_cfg):
     elif model_cfg.model_class == 'BatchIthemal':
         # model = 
         rnn_params = RnnParameters(
-            embedding_size=512,
-            hidden_size=512,
+            embedding_size=model_cfg.dim,
+            hidden_size=model_cfg.dim,
             num_classes=1,
             connect_tokens=False,
             skip_connections=False,
@@ -73,6 +82,22 @@ def load_model(model_cfg):
             pad_idx=model_cfg.pad_idx,
         )
         md = BatchRNN(rnn_params)
+        md.set_learnable_embedding(mode='none', dictsize=model_cfg.vocab_size)
+        return md
+    elif model_cfg.model_class == 'BatchRNN2':
+        # model = 
+        rnn_params = RnnParameters(
+            embedding_size=model_cfg.dim,
+            hidden_size=model_cfg.dim,
+            num_classes=1,
+            connect_tokens=False,
+            skip_connections=False,
+            hierarchy_type=RnnHierarchyType.MULTISCALE,
+            rnn_type=RnnType.LSTM,
+            learn_init=False,
+            pad_idx=model_cfg.pad_idx,
+        )
+        md = BatchRNN2(rnn_params)
         md.set_learnable_embedding(mode='none', dictsize=model_cfg.vocab_size)
         return md
     else:

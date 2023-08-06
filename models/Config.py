@@ -4,7 +4,7 @@ import json
 class Config(NamedTuple):
     "Configuration for BERT model"
     model_class: str = None
-    vocab_size: int = None # Size of Vocabulary
+    vocab_size: int = 700 # Size of Vocabulary
     dim: int = 768 # Dimension of Hidden Layer in Transformer Encoder
     n_layers: int = 12 # Numher of Hidden Layers
     n_heads: int = 12 # Numher of Heads in Multi-Headed Attention Layers
@@ -18,6 +18,8 @@ class Config(NamedTuple):
     pred_drop: float = 0
     stacked: bool = False
     only_unique: bool = False
+    src_idx: int = -1
+    dst_idx: int = -2
 
     @classmethod
     def from_json(cls, file):

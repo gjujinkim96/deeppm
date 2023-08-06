@@ -1,7 +1,4 @@
 import argparse
-import torch
-
-import torch.nn as nn
 import models
 import train
 import wandb_log
@@ -12,9 +9,9 @@ from experiments.experiment import Experiment
 import losses 
 
 import dataset as ds
+import data.data_cost as dt
 import optimizers as opt
 import lr_schedulers as lr_sch
-from dataset import BasicBlockDataset, StackedBlockDataset
 
 def main():
     # type: () -> None
@@ -32,6 +29,7 @@ def main():
     parser.add_argument('--exp_override', required=False, action='store_true', help='For overriding run')
     parser.add_argument('--model_class', required=False, help='For overriding model_class in model_cfg')
     parser.add_argument('--lr_scheduler', required=False, help='For overriding lr_scheduler in train_cfg')
+    parser.add_argument('--optimizer', required=False, help='For overriding optimizer in train_cfg')
     parser.add_argument('--lr', required=False, help='For overriding lr in train_cfg')
     parser.add_argument('--batch_size', required=False, help='For overriding batch_size in train_cfg')
     parser.add_argument('--val_batch_size', required=False, help='For overriding val_batch_size in train_cfg')
@@ -40,7 +38,12 @@ def main():
     parser.add_argument('--checkpoint', required=False, action='store_true', help='For overriding whether to use checkpoint')
     parser.add_argument('--max_len', required=False, help='For overriding max_Len')
     parser.add_argument('--raw_data', required=False, action='store_true', help='For overriding raw_data')
-    parser.add_argument('--only_not_unique', required=False, action='store_true', help='For overriding only_unique')
+    parser.add_argument('--dim', required=False, help='For overriding dim in model_cfg')
+    parser.add_argument('--use_batch_step_lr', required=False, action='store_true', help='For overriding dim in model_cfg')
+    parser.add_argument('--hyperparameter_test', required=False, action='store_true', help='For overriding hyperparameter_test')
+    parser.add_argument('--hyperparameter_test_mult', required=False, help='For overriding hyperparameter_test_mult')
+    parser.add_argument('--short_only', required=False, action='store_true', help='For overriding short_only')
+    parser.add_argument('--long_rev', required=False, action='store_true', help='For overriding long_rev')
 
     args = parser.parse_args()
 
@@ -63,6 +66,18 @@ def main():
         train_cfg = train_cfg._replace(checkpoint = args.checkpoint)
     if args.raw_data is not None:
         train_cfg = train_cfg._replace(raw_data = args.raw_data)
+    if args.optimizer is not None:
+        train_cfg = train_cfg._replace(optimizer = args.optimizer)
+    if args.use_batch_step_lr is not None:
+        train_cfg = train_cfg._replace(use_batch_step_lr = args.use_batch_step_lr)
+    if args.hyperparameter_test is not None:
+        train_cfg = train_cfg._replace(hyperparameter_test = args.hyperparameter_test)
+    if args.hyperparameter_test_mult is not None:
+        train_cfg = train_cfg._replace(hyperparameter_test_mult = float(args.hyperparameter_test_mult))
+    if args.short_only is not None:
+        train_cfg = train_cfg._replace(short_only = args.short_only)
+    if args.long_rev is not None:
+        train_cfg = train_cfg._replace(long_rev = args.long_rev)
         
 
     print('#############')
@@ -76,17 +91,24 @@ def main():
         model_cfg = model_cfg._replace(model_class = args.model_class)
     if args.max_len is not None:
         model_cfg = model_cfg._replace(max_len = int(args.max_len))
-    if args.only_not_unique is not None:
-        model_cfg = model_cfg._replace(only_unique = False)
+    if args.dim is not None:
+        model_cfg = model_cfg._replace(dim = int(args.dim))
 
     expt = Experiment(args.experiment_name, args.experiment_time)
     if expt.check_root_exist() and not args.exp_override:
         print(f'{expt.experiment_root_path()} exist.')
         return 
 
-    data = load_data(args, model_cfg)
-    model_cfg = model_cfg._replace(vocab_size = len(data.token_to_hot_idx))
+    data = dt.load_dataset(args.data, small_size=args.small_size,
+                           stacked=model_cfg.stacked, only_unique=model_cfg.only_unique,
+                           hyperparameter_test=train_cfg.hyperparameter_test,
+                            hyperparameter_test_mult=train_cfg.hyperparameter_test_mult,
+                            short_only=train_cfg.short_only, rev=train_cfg.long_rev)
+    # data = load_data(args, model_cfg)
+    # model_cfg = model_cfg._replace(vocab_size = len(data.token_to_hot_idx))
     model_cfg = model_cfg._replace(pad_idx = data.pad_idx)
+    model_cfg = model_cfg._replace(src_idx = data.token_to_hot_idx['<SRCS>'])
+    model_cfg = model_cfg._replace(dst_idx = data.token_to_hot_idx['<DSTS>'])
     
     print('#############')
     print(model_cfg)
@@ -99,7 +121,12 @@ def main():
 
     model = models.load_model(model_cfg)
     optimizer = opt.load_optimizer(model, train_cfg)
-    lr_scheduler = lr_sch.load_lr_scheduler(optimizer, train_cfg)
+
+    if train_cfg.use_batch_step_lr:
+        total_batch = (len(train_ds) + train_cfg.batch_size - 1) / train_cfg.batch_size
+        lr_scheduler = lr_sch.load_batch_step_lr_scheduler(optimizer, train_cfg, total_batch)
+    else:
+        lr_scheduler = lr_sch.load_lr_scheduler(optimizer, train_cfg)
     loss_fn = losses.load_loss_fn(train_cfg)
 
     if train_cfg.checkpoint and \
@@ -111,6 +138,7 @@ def main():
     wandb_log.wandb_init(args, model_cfg, train_cfg, len(train_ds))
     
     dump_model_and_data(model, data, os.path.join(expt.experiment_root_path(), 'predictor.dump'))
+    dump_configs(train_cfg, model_cfg, os.path.join(expt.experiment_root_path(), 'config.dump'))
 
     trainer = train.Trainer(train_cfg, model, (train_ds, test_ds), expt, 
                             optimizer, lr_scheduler, loss_fn, device, args.small_training)

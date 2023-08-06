@@ -42,13 +42,55 @@ class Data(object):
     def prepare_data(self):
         pass
 
-    def generate_datasets(self):
+    def generate_datasets(self, hyperparameter_test=False, hyperparameter_test_mult=0.2, 
+                        short_only=False):
         size = len(self.data)
         split = (size * self.percentage) // 100
-        self.train  = self.data[:split]
-        self.test = self.data[split:]
+
+        self.test_idx = []
+        if short_only:
+            self.train = []
+            train_cnt = 0
+            self.test = []
+
+            for idx, datum in enumerate(self.data):
+                if datum.block.num_instrs() < 50 and train_cnt < split:
+                    self.train.append(datum)
+                    train_cnt += 1
+                else:
+                    self.test.append(datum)
+                    self.test_idx.append(idx)
+        else:
+            self.train  = self.data[:split]
+            self.test = self.data[split:]
+            self.test_idx = list(range(split, len(self.data)))
+
+        if hyperparameter_test:
+            self.train = self.train[:int(len(self.train) * hyperparameter_test_mult)]
+            self.test = self.test[:int(len(self.test) * hyperparameter_test_mult)]
         print ('train ' + str(len(self.train)) + ' test ' + str(len(self.test)))
 
+    def generate_datasets_rev(self, hyperparameter_test=False, hyperparameter_test_mult=0.2, 
+                        short_only=False):
+        size = len(self.data)
+        split = (size * self.percentage) // 100
+
+        self.test_idx = []
+
+        self.train = []
+        self.test = []
+
+        for idx, datum in enumerate(self.data):
+            if (idx < split and datum.block.num_instrs() >= 50) or (idx >= split and datum.block.num_instrs() < 50):
+                self.test.append(datum)
+                self.test_idx.append(idx)
+            else:
+                self.train.append(datum)
+
+        if hyperparameter_test:
+            self.train = self.train[:int(len(self.train) * hyperparameter_test_mult)]
+            self.test = self.test[:int(len(self.test) * hyperparameter_test_mult)]
+        print ('train ' + str(len(self.train)) + ' test ' + str(len(self.test)))
 
     def generate_batch(self, batch_size, partition=None):
         if partition is None:

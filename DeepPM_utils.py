@@ -75,6 +75,16 @@ def dump_model_and_data(model, data, fname):
         dataset_params=data.dump_dataset_params(),
     ), fname)
 
+def dump_configs(train_cfg, model_cfg, fname):
+    try:
+        os.makedirs(os.path.dirname(fname))
+    except OSError:
+        pass
+        torch.save({
+            'train_cfg': train_cfg,
+            'model_cfg': model_cfg,
+        }, fname)
+
 def load_model_and_data(fname):
     # type: (str) -> (md.AbstractGraphMode, dt.DataCost)
     dump = torch.load(fname)

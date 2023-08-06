@@ -4,6 +4,10 @@ import pandas as pd
 
 def wandb_init(args, model_cfg, train_cfg, train_data_len):
     mode = 'disabled' if args.wandb_disabled else 'online'
+    tags = ['v2_unique_updated']
+    if train_cfg.hyperparameter_test:
+        tags.append('hyper')
+
     run = wandb.init(
         project='deeppm',
         config={
@@ -27,6 +31,10 @@ def wandb_init(args, model_cfg, train_cfg, train_data_len):
             "loss_fn": train_cfg.loss_fn,
             "checkpoint": train_cfg.checkpoint,
             'raw_data': train_cfg.raw_data,
+            'use_batch_step_lr': train_cfg.use_batch_step_lr,
+            'hyperparameter_test': train_cfg.hyperparameter_test,
+            'short_only': train_cfg.short_only,
+            'long_rev': train_cfg.long_rev,
 
             "small_size": args.small_size,
             "small_training": args.small_training,
@@ -36,14 +44,14 @@ def wandb_init(args, model_cfg, train_cfg, train_data_len):
         # settings=wandb.Settings(code_dir="., "),
         mode=mode,
         name=args.experiment_name,
-        tags=['sum_zero'],
+        tags=tags,
     )
 
     run.log_code(include_fn=lambda path: path.endswith(".py") or path.endswith(".sh") or path.endswith(".json"))
 
 
-    wandb.define_metric("loss/Validation", summary="min")
-    wandb.define_metric("val/correct/Threshold 25", summary="max")
+    # wandb.define_metric("loss/Validation", summary="min")
+    # wandb.define_metric("val/correct/Threshold 25", summary="max")
 
 
 
@@ -67,6 +75,8 @@ def cat_by_inst(value):
 
     return cat_names[idx]
 
+best_val_loss = 1000000
+best_25_accuracy = -1
 def wandb_log_val(er, epoch):
     df = pd.DataFrame.from_dict({
         'predicted': er.prediction,
@@ -114,6 +124,18 @@ def wandb_log_val(er, epoch):
             logging_dict[f'val/correct/threshold_{threshold}/{cat_name}'] = cat_correct[cat_name]
 
     wandb.log(logging_dict)
+
+    global best_val_loss
+    global best_25_accuracy
+
+    if er.loss < best_val_loss:
+        best_val_loss = er.loss
+        wandb.run.summary['best_loss'] = best_val_loss
+    
+    cur_accuracy = (df.mape < 25).mean().item()
+    if  cur_accuracy > best_25_accuracy:
+        best_25_accuracy = cur_accuracy
+        wandb.run.summary['best_accr_25'] = best_25_accuracy
 
 def wandb_log_train(br, lr, epoch):
     df = pd.DataFrame.from_dict({

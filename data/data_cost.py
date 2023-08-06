@@ -40,6 +40,12 @@ class DataInstructionEmbedding(Data):
         self.data = []
         self.raw = []
 
+        # self.special_idx = {}            
+        # for token in ['<PAD>', '<START>', '<SRCS>', '<MEM>', '</MEM>', '<DSTS>', '<END>', '<DONE>']:
+        #     self.token_to_hot_idx[token] = len(self.token_to_hot_idx)
+        #     self.hot_idx_to_token[self.token_to_hot_idx[token]] = token
+        #     self.special_idx[token] = self.token_to_hot_idx[token]
+
     def dump_dataset_params(self):
         return (self.token_to_hot_idx, self.hot_idx_to_token)
 
@@ -57,7 +63,6 @@ class DataInstructionEmbedding(Data):
                 self.hot_idx_to_token[self.token_to_hot_idx[elem]] = elem
             return self.token_to_hot_idx[elem]
         
-        self.pad_idx = hot_idxify('<PAD>')
 
         if progress:
             iterator = tqdm(self.raw_data)
@@ -161,6 +166,7 @@ class DataInstructionEmbedding(Data):
             block_root = ET.fromstring(code_xml)
             instrs = []
             raw_instrs = []
+            readable_instrs = []
             curr_mem = self.mem_start
             for _ in range(1): # repeat for duplicated blocks
                 # handle missing or incomplete code_intel
@@ -202,6 +208,7 @@ class DataInstructionEmbedding(Data):
 
                     raw_instr.append('<END>')
                     raw_instrs.append(list(map(hot_idxify, raw_instr)))
+                    readable_instrs.append(raw_instr)
                     instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
                     instrs[-1].intel = m_code_intel
             if len(raw_instrs) > 400:
@@ -213,25 +220,28 @@ class DataInstructionEmbedding(Data):
             datum = DataItem(raw_instrs, timing, block, code_id)
             self.data.append(datum)
 
-def hashkey(x):
-    return '@'.join('_'.join(map(str, inst)) for inst in x)
+            self.raw.append(readable_instrs)
 
-def extract_unique(data):    
+def extract_unique(data, raw):    
     grouped = defaultdict(list)
     for idx, datum in enumerate(tqdm(data, total=len(data))):
-        grouped[hashkey(datum.x)].append(idx)
+        grouped[str(datum.block.instrs)].append(idx)
         
     cleaned = []
+    cleaned_raw = []
     for k, v in tqdm(grouped.items(), total=len(grouped)):
         vs = [data[idx].y for idx in v]
         new_y = sum(vs) / len(vs)
         datum = data[v[0]]
         datum.y = new_y
         cleaned.append(datum)
+        cleaned_raw.append(raw[v[0]])
     
-    return cleaned
+    print(f'{len(cleaned)} unique data found!')
+    return cleaned, cleaned_raw
 
-def load_dataset(data_savefile, small_size=False, stacked=False, only_unique=False):
+def load_dataset(data_savefile, small_size=False, stacked=False, only_unique=False, hyperparameter_test=False,
+                    hyperparameter_test_mult=0.2, short_only=False, rev=False):
     data = DataInstructionEmbedding()
 
     if small_size:
@@ -246,8 +256,15 @@ def load_dataset(data_savefile, small_size=False, stacked=False, only_unique=Fal
         data.prepare_data()
 
     if only_unique:
-        data.data = extract_unique(data.data)
+        data.data, data.raw = extract_unique(data.data, data.raw)
         
-    data.generate_datasets()
+    if rev:
+        data.generate_datasets_rev(hyperparameter_test=hyperparameter_test, 
+                           hyperparameter_test_mult=hyperparameter_test_mult,
+                           short_only=short_only)
+    else:
+        data.generate_datasets(hyperparameter_test=hyperparameter_test, 
+                           hyperparameter_test_mult=hyperparameter_test_mult,
+                           short_only=short_only)
 
     return data

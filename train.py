@@ -39,6 +39,11 @@ class Config(NamedTuple):
     warmup: float = 0.001
     checkpoint: bool = False
     raw_data: bool = False
+    use_batch_step_lr: bool = False
+    hyperparameter_test: bool = False
+    hyperparameter_test_mult: float = 0.2
+    short_only: bool = False
+    long_rev: bool = False
     
     #save_steps: int = 100 # interval for saving model
     #total_steps: int = 100000 # total number of steps to train
@@ -197,6 +202,11 @@ class Trainer(object):
             self.loss += other.loss
             self.loss_sum += other.loss_sum
             return self
+        
+        def __repr__(self):
+            return f'''Batch len: {self.batch_len}
+Loss: {self.loss}
+'''
 
     def run_ithemal(self, datum, answers, predictions, is_train, loss_mod=None):
         output = self.model(datum)
@@ -342,10 +352,13 @@ class Trainer(object):
                 self.loss_reporter.report(batch_result.batch_len, 
                                     batch_result.loss, epoch_loss_sum/step, total_correct/total_cnts)   
 
+                if self.train_cfg.use_batch_step_lr:
+                    self.lr_scheduler.step()
               
             epoch_loss_avg = epoch_loss_sum / step
             self.loss_reporter.end_epoch(self.model,self.optimizer, self.lr_scheduler, epoch_loss_avg)
 
             self.validate(resultfile, epoch_no + 1)
-            self.lr_scheduler.step()
+            if not self.train_cfg.use_batch_step_lr:
+                self.lr_scheduler.step()
         self.loss_reporter.finish(self.model,self.optimizer, self.lr_scheduler)
