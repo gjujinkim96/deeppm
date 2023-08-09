@@ -1,58 +1,27 @@
 import wandb
-import torch
 import pandas as pd
+from utils import recursive_vars
 
-def wandb_init(args, model_cfg, train_cfg, train_data_len):
+def wandb_init(args, cfg):
     mode = 'disabled' if args.wandb_disabled else 'online'
+    # model_cfg, train_cfg, train_data_len):
     tags = ['v2_unique_updated']
-    if train_cfg.hyperparameter_test:
+    if cfg.train.hyperparameter_testing.using:
         tags.append('hyper')
 
+    config = recursive_vars(cfg)
+    config['small_size'] = args.small_size
+    config['small_training'] = args.small_training
     run = wandb.init(
         project='deeppm',
-        config={
-            "model_class": model_cfg.model_class,
-            "dim": model_cfg.dim,
-	        "dim_ff": model_cfg.dim_ff,
-	        "n_layers": model_cfg.n_layers,
-	        "n_heads": model_cfg.n_heads,
-	        "max_len": model_cfg.max_len,
-            "stacked_data": model_cfg.stacked,
-            "only_unique": model_cfg.only_unique,
-
-            "seed": train_cfg.seed,
-            "batch_size": train_cfg.batch_size,
-            "val_batch_size": train_cfg.val_batch_size,
-            "lr": train_cfg.lr,
-            "lr_total_iters": train_cfg.lr_total_iters,
-            "n_epochs": train_cfg.n_epochs,
-            "lr_scheduler": train_cfg.lr_scheduler,
-            "optimizer": train_cfg.optimizer,
-            "loss_fn": train_cfg.loss_fn,
-            "checkpoint": train_cfg.checkpoint,
-            'raw_data': train_cfg.raw_data,
-            'use_batch_step_lr': train_cfg.use_batch_step_lr,
-            'hyperparameter_test': train_cfg.hyperparameter_test,
-            'short_only': train_cfg.short_only,
-            'long_rev': train_cfg.long_rev,
-
-            "small_size": args.small_size,
-            "small_training": args.small_training,
-
-            "steps_per_epoch": (train_data_len + train_cfg.batch_size - 1) // train_cfg.batch_size,
-        },
-        # settings=wandb.Settings(code_dir="., "),
+        config=config,
         mode=mode,
-        name=args.experiment_name,
+        name=args.exp_name,
         tags=tags,
     )
 
-    run.log_code(include_fn=lambda path: path.endswith(".py") or path.endswith(".sh") or path.endswith(".json"))
-
-
-    # wandb.define_metric("loss/Validation", summary="min")
-    # wandb.define_metric("val/correct/Threshold 25", summary="max")
-
+    run.log_code(include_fn=lambda path: path.endswith(".py") or \
+                path.endswith(".sh") or path.endswith(".json")) or path.endswith(".yaml")
 
 
 def wandb_finish():
@@ -75,8 +44,8 @@ def cat_by_inst(value):
 
     return cat_names[idx]
 
-best_val_loss = 1000000
-best_25_accuracy = -1
+best_val_loss = float('inf')
+best_25_accuracy = float('-inf')
 def wandb_log_val(er, epoch):
     df = pd.DataFrame.from_dict({
         'predicted': er.prediction,
@@ -115,7 +84,6 @@ def wandb_log_val(er, epoch):
     mape_table = wandb.Table(data=mape_data, columns = ["Number of Instructions", "Mean MAPE Error"])
     logging_dict["val/summary/mean error"] = wandb.plot.bar(mape_table, "Number of Instructions", 'Mean MAPE Error', title="Mean Error Over Size")
 
-    # print(logging_dict)
     thresholds = [25, 20, 15]
     for threshold in thresholds:
         df[f't_{threshold}'] = df.mape < threshold

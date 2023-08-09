@@ -9,6 +9,16 @@ import logging
 import numpy as np
 import torch
 
+from types import SimpleNamespace
+
+def recursive_vars(x):
+    ret = {}
+    for k, v in vars(x).items():
+        if isinstance(v, SimpleNamespace):
+            v = recursive_vars(v)
+        ret[k] = v
+    return ret
+
 def seed_worker(worker_id):
     worker_seed = torch.initial_seed() % 2**32
     np.random.seed(worker_seed)

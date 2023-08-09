@@ -1,0 +1,14 @@
+seed: 3431
+batch_size: 16
+val_batch_size: 16
+lr: 0.00001
+lr_total_iters: 5
+n_epochs: 30
+warmup: 0.001
+clip_grad_norm: 0.2
+lr_scheduler: LinearLR
+optimizer: Adam
+hyperparameter_testing:
+  using: False
+  mult: 0.2
+too_long_limit: 512

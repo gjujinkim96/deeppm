@@ -1,7 +1,7 @@
 #main data file
 
 import numpy as np
-import utilities as ut
+import data.utilities as ut
 import random
 import torch.nn as nn
 import torch.autograd as autograd
@@ -39,9 +39,6 @@ class Data(object):
         for i in range(self.opcode_start, self.mem_start):
             self.costs[i] = np.random.randint(1,maxnum)
 
-    def prepare_data(self):
-        pass
-
     def generate_datasets(self, hyperparameter_test=False, hyperparameter_test_mult=0.2, 
                         short_only=False):
         size = len(self.data)
@@ -69,47 +66,3 @@ class Data(object):
             self.train = self.train[:int(len(self.train) * hyperparameter_test_mult)]
             self.test = self.test[:int(len(self.test) * hyperparameter_test_mult)]
         print ('train ' + str(len(self.train)) + ' test ' + str(len(self.test)))
-
-    def generate_datasets_rev(self, hyperparameter_test=False, hyperparameter_test_mult=0.2, 
-                        short_only=False):
-        size = len(self.data)
-        split = (size * self.percentage) // 100
-
-        self.test_idx = []
-
-        self.train = []
-        self.test = []
-
-        for idx, datum in enumerate(self.data):
-            if (idx < split and datum.block.num_instrs() >= 50) or (idx >= split and datum.block.num_instrs() < 50):
-                self.test.append(datum)
-                self.test_idx.append(idx)
-            else:
-                self.train.append(datum)
-
-        if hyperparameter_test:
-            self.train = self.train[:int(len(self.train) * hyperparameter_test_mult)]
-            self.test = self.test[:int(len(self.test) * hyperparameter_test_mult)]
-        print ('train ' + str(len(self.train)) + ' test ' + str(len(self.test)))
-
-    def generate_batch(self, batch_size, partition=None):
-        if partition is None:
-            partition = (0, len(self.train))
-
-        # TODO: this seems like it would be expensive for a large data set
-        (start, end) = partition
-        population = range(start, end)
-        selected = random.sample(population,batch_size)
-
-        self.batch = []
-        for index in selected:
-            self.batch.append(self.train[index])
-
-    def plot_histogram(self, data):
-
-        ys = list()
-        for item in data:
-          ys.append(item.y)
-
-        plt.hist(ys, min(max(ys), 1000))
-        plt.show()

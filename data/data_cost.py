@@ -17,7 +17,7 @@ import os
 import sys
 sys.path.append('..')
 
-import utilities as ut
+import data.utilities as ut
 from collections import defaultdict
 
 
@@ -32,19 +32,25 @@ class DataItem:
         return f'---- Block ----\n{self.block}\nX: {self.x}  Y: {self.y}'
 
 class DataInstructionEmbedding(Data):
-
-    def __init__(self):
+    def __init__(self, special_tokens=None):
         super(DataInstructionEmbedding, self).__init__()
         self.token_to_hot_idx = {}
         self.hot_idx_to_token = {}
         self.data = []
         self.raw = []
+        self.unk_tok = '<UNK>'
+        self.next_hot_idx = 0
 
-        # self.special_idx = {}            
-        # for token in ['<PAD>', '<START>', '<SRCS>', '<MEM>', '</MEM>', '<DSTS>', '<END>', '<DONE>']:
-        #     self.token_to_hot_idx[token] = len(self.token_to_hot_idx)
-        #     self.hot_idx_to_token[self.token_to_hot_idx[token]] = token
-        #     self.special_idx[token] = self.token_to_hot_idx[token]
+        if special_tokens is not None:
+            self.next_hot_idx = max(special_tokens.values()) + 1
+            for k, v in special_tokens.items():
+                splitted = k.split('_')
+                if len(splitted) > 1 and splitted[1] == 'FIN':
+                    token = f'</{k}>'
+                else:
+                    token = f'<{k}>'
+                self.token_to_hot_idx[token] = v
+                self.hot_idx_to_token[v] = token
 
     def dump_dataset_params(self):
         return (self.token_to_hot_idx, self.hot_idx_to_token)
@@ -52,18 +58,21 @@ class DataInstructionEmbedding(Data):
     def load_dataset_params(self, params):
         (self.token_to_hot_idx, self.hot_idx_to_token) = params
 
-    def prepare_data(self, progress=True, fixed=False):
-        # long_tmp = []
-        def hot_idxify(elem):
-            if elem not in self.token_to_hot_idx:
-                if fixed:
-                    # TODO: this would be a good place to implement UNK tokens
-                    raise ValueError('Ithemal does not yet support UNK tokens!')
-                self.token_to_hot_idx[elem] = len(self.token_to_hot_idx)
+    def hot_idxify(self, elem, fixed=False):
+        if elem not in self.token_to_hot_idx:
+            if fixed:
+                if self.unk_tok not in self.token_to_hot_idx:
+                    self.token_to_hot_idx[self.unk_tok] = self.next_hot_idx
+                    self.next_hot_idx += 1
+                    self.hot_idx_to_token[self.token_to_hot_idx[self.unk_tok]] = self.unk_tok
+                return self.token_to_hot_idx[self.unk_tok]
+            else:
+                self.token_to_hot_idx[elem] = self.next_hot_idx
+                self.next_hot_idx += 1
                 self.hot_idx_to_token[self.token_to_hot_idx[elem]] = elem
-            return self.token_to_hot_idx[elem]
-        
+        return self.token_to_hot_idx[elem]
 
+    def prepare_data(self, progress=True):
         if progress:
             iterator = tqdm(self.raw_data)
         else:
@@ -124,7 +133,7 @@ class DataInstructionEmbedding(Data):
                     instrs[-1].intel = m_code_intel
 
             readable_raw.append('<DONE>')
-            raw_instrs = list(map(hot_idxify, readable_raw))
+            raw_instrs = list(map(self.hot_idxify, readable_raw))
             if len(raw_instrs) > 4000:
                 #print(len(raw_instrs))
                 continue
@@ -133,25 +142,14 @@ class DataInstructionEmbedding(Data):
             block.create_dependencies()
             datum = DataItem(raw_instrs, timing, block, code_id)
 
-            # if len(datum.x) > 512:
-            #     long_tmp.append(datum)
-            # else:
+ 
             self.data.append(datum)
             self.raw.append(readable_raw)
 
-        # print('long data: ', len(long_tmp))
-        # self.data.extend(long_tmp)
 
-    def prepare_stacked_data(self, progress=True, fixed=False):
-        def hot_idxify(elem):
-            if elem not in self.token_to_hot_idx:
-                if fixed:
-                    # TODO: this would be a good place to implement UNK tokens
-                    raise ValueError('Ithemal does not yet support UNK tokens!')
-                self.token_to_hot_idx[elem] = len(self.token_to_hot_idx)
-                self.hot_idx_to_token[self.token_to_hot_idx[elem]] = elem
-            return self.token_to_hot_idx[elem]
-        self.pad_idx = hot_idxify('<PAD>')
+    def prepare_stacked_data(self, progress=True):
+        
+        self.pad_idx = self.hot_idxify('<PAD>')
 
         if progress:
             iterator = tqdm(self.raw_data)
@@ -159,10 +157,7 @@ class DataInstructionEmbedding(Data):
             iterator = self.raw_data
 
         for (code_id, timing, code_intel, code_xml) in iterator:
-            
-            #if timing > 1112:#1000:
-            #    continue
-
+        
             block_root = ET.fromstring(code_xml)
             instrs = []
             raw_instrs = []
@@ -175,7 +170,7 @@ class DataInstructionEmbedding(Data):
                     raw_instr = []
                     opcode = int(instr.find('opcode').text)
                     raw_instr.extend([opcode, '<SRCS>'])
-                    #raw_instr.append(opcode)
+                    
                     srcs = []
                     for src in instr.find('srcs'):
                         if src.find('mem') is not None:
@@ -207,12 +202,11 @@ class DataInstructionEmbedding(Data):
                             dsts.append(int(dst.text))
 
                     raw_instr.append('<END>')
-                    raw_instrs.append(list(map(hot_idxify, raw_instr)))
+                    raw_instrs.append(list(map(self.hot_idxify, raw_instr)))
                     readable_instrs.append(raw_instr)
                     instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
                     instrs[-1].intel = m_code_intel
             if len(raw_instrs) > 400:
-                #print(len(raw_instrs))
                 continue
 
             block = ut.BasicBlock(instrs)
@@ -221,6 +215,7 @@ class DataInstructionEmbedding(Data):
             self.data.append(datum)
 
             self.raw.append(readable_instrs)
+
 
 def extract_unique(data, raw):    
     grouped = defaultdict(list)
@@ -240,9 +235,9 @@ def extract_unique(data, raw):
     print(f'{len(cleaned)} unique data found!')
     return cleaned, cleaned_raw
 
-def load_dataset(data_savefile, small_size=False, stacked=False, only_unique=False, hyperparameter_test=False,
-                    hyperparameter_test_mult=0.2, short_only=False, rev=False):
-    data = DataInstructionEmbedding()
+def load_data(data_savefile, small_size=False, stacked=False, only_unique=False, hyperparameter_test=False,
+                    hyperparameter_test_mult=0.2, short_only=False, special_tokens=None):
+    data = DataInstructionEmbedding(special_tokens=special_tokens)
 
     if small_size:
         data.raw_data = torch.load(data_savefile)[:100]
@@ -258,13 +253,8 @@ def load_dataset(data_savefile, small_size=False, stacked=False, only_unique=Fal
     if only_unique:
         data.data, data.raw = extract_unique(data.data, data.raw)
         
-    if rev:
-        data.generate_datasets_rev(hyperparameter_test=hyperparameter_test, 
-                           hyperparameter_test_mult=hyperparameter_test_mult,
-                           short_only=short_only)
-    else:
-        data.generate_datasets(hyperparameter_test=hyperparameter_test, 
-                           hyperparameter_test_mult=hyperparameter_test_mult,
-                           short_only=short_only)
+    data.generate_datasets(hyperparameter_test=hyperparameter_test, 
+                        hyperparameter_test_mult=hyperparameter_test_mult,
+                        short_only=short_only)
 
     return data

@@ -1,25 +1,25 @@
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
+from utils import recursive_vars
+import importlib, inspect
 
-def load_dataset(data, train_cfg, model_cfg):
-    if train_cfg.raw_data or not model_cfg.stacked:
-        train_ds = BasicBlockDataset(data.train, model_cfg)
-        test_ds = BasicBlockDataset(data.test, model_cfg)
-    elif model_cfg.stacked:
-        train_ds = StackedBlockDataset(data.train, model_cfg)
-        test_ds = StackedBlockDataset(data.test, model_cfg)
-    else:
-        raise NotImplementedError()
+# def load_dataset(data, cfg):
+#     if cfg.data.stacked:
+#         train_ds = StackedBlockDataset(data.train, cfg.model)
+#         test_ds = StackedBlockDataset(data.test, cfg.model)
+#     else:
+#         train_ds = BasicBlockDataset(data.train, cfg.model)
+#         test_ds = BasicBlockDataset(data.test, cfg.model)
         
-    print(f'Train Dataset: {len(train_ds)}  Test Dataset: {len(test_ds)}')
-    return train_ds, test_ds
+#     print(f'Train Dataset: {len(train_ds)}  Test Dataset: {len(test_ds)}')
+#     return train_ds, test_ds
 
 class BasicBlockDataset(Dataset):
-    def __init__(self, embeddings, model_cfg):
-        self.embeddings = embeddings
-        self.pad_idx = model_cfg.pad_idx
-        self.max_len = model_cfg.max_len
+    def __init__(self, data, special_tokens, too_long_limit=512):
+        self.embeddings = data
+        self.pad_idx = special_tokens['PAD']
+        self.too_long_limit = too_long_limit
 
     def __len__(self):
         return len(self.embeddings)
@@ -27,10 +27,7 @@ class BasicBlockDataset(Dataset):
     def __getitem__(self, index):
         return self.embeddings[index]
     
-    def raw_collate_fn(self, batch):
-        return batch
-    
-    def block_collate_fn(self, batch):
+    def collate_fn(self, batch):
         short_max_len = 0
         short_x = []
         short_y = []
@@ -42,7 +39,7 @@ class BasicBlockDataset(Dataset):
 
         for idx, item in enumerate(batch):
             ten = torch.tensor(item.x)
-            if len(ten) <= self.max_len:
+            if len(ten) <= self.too_long_limit:
                 short_max_len = max(len(ten), short_max_len)
                 short_x.append(ten)
                 short_y.append(item.y)
@@ -84,9 +81,9 @@ def pad_block(item, pad_idx):
 
 
 class StackedBlockDataset(Dataset):
-    def __init__(self, data, model_cfg):
-        self.pad_idx = model_cfg.pad_idx
-        self.short_len = model_cfg.max_len
+    def __init__(self, data, special_tokens, too_long_limit=512):
+        self.pad_idx = special_tokens['PAD']
+        self.too_long_limit = too_long_limit
         self.xs = [pad_block(datum.x, self.pad_idx) for datum in data]
         self.ys = [datum.y for datum in data]
         self.inst_lens = [datum.block.num_instrs() for datum in data]
@@ -98,7 +95,7 @@ class StackedBlockDataset(Dataset):
     def __getitem__(self, index):
         return self.xs[index], self.ys[index], self.inst_lens[index]
     
-    def block_collate_fn(self, batch):
+    def collate_fn(self, batch):
         short_x = []
         short_y = []
         long_x = []
@@ -107,7 +104,7 @@ class StackedBlockDataset(Dataset):
         long_inst_len = []
 
         for x, y, inst_len in batch:
-            if x.numel() <= self.short_len:
+            if x.numel() <= self.too_long_limit:
                 short_x.append(x)
                 short_y.append(y)
                 short_inst_len.append(inst_len)
@@ -138,3 +135,29 @@ class StackedBlockDataset(Dataset):
             'long_inst_len': long_inst_len,
         }
     
+
+class_dict = {}
+
+module = importlib.import_module('dataset')
+for name, cls in inspect.getmembers(module, inspect.isclass):
+    if cls.__module__ == module.__name__:
+        class_dict[name] = cls 
+
+def load_dataset_from_cfg(data, cfg, show=False):
+    train_dataset, test_dataset = load_dataset(data, cfg.data.dataset_class, recursive_vars(cfg.data.dataset_setting),
+                        recursive_vars(cfg.data.special_token_idx))
+    if show:
+        print(f'Train Dataset: {len(train_dataset)}  Test Dataset: {len(test_dataset)}')
+    return train_dataset, test_dataset
+    
+
+def load_dataset(data, dataset_type, dataset_setting={}, special_tokens={}):
+    if dataset_type not in class_dict:
+        raise NotImplementedError()
+    
+    dataset_class = class_dict[dataset_type]
+    train_dataset = dataset_class(data.train, special_tokens=special_tokens, **dataset_setting)
+    test_dataset = dataset_class(data.test, special_tokens=special_tokens, **dataset_setting)
+
+    return train_dataset, test_dataset
+

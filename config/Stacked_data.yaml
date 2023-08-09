@@ -1,0 +1,14 @@
+data_file: training_data/intel_core.data
+model_class: StackedDeepPM
+stacked: true
+only_unique: true
+short_only: false
+raw_data: false
+#  sample usage of predifined special token idxs
+# special_token_idx:
+#   PAD: 0
+#   SRCS: 1
+#   DSTS: 2
+#   MEM: 3 # <MEM>
+#   MEM_FIN: 4  # </MEM>
+#   END: 5

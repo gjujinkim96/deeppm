@@ -2,23 +2,19 @@ import torch
 import torch.nn as nn
 import math
 
-def load_loss_fn(train_cfg):
-    if train_cfg.loss_fn == 'mape':
-        return mape_loss
-    else:
-        raise NotImplementedError()
-    
-def mape_loss(output, target):
+import importlib, inspect
 
-    # loss_fn = nn.MSELoss(reduction='none')
-    # loss = torch.sqrt(loss_fn(output, target) + 1e-5) / (target + 1e-5)
-    # loss = torch.mean(loss)
 
-    loss_fn = nn.L1Loss(reduction='none')
-    loss = loss_fn(output, target) / (target + 1e-5)
-    loss = torch.mean(loss)
+class MapeLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
 
-    return loss
+        self.loss_fn = nn.L1Loss(reduction='none')
+
+    def forward(self, output, target):
+        loss = self.loss_fn(output, target) / (target + 1e-5)
+        return torch.mean(loss)
+       
 
 # https://datascience.stackexchange.com/questions/96271/logcoshloss-on-pytorch
 def log_cosh_loss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
@@ -34,4 +30,22 @@ class LogCoshLoss(torch.nn.Module):
         self, y_pred: torch.Tensor, y_true: torch.Tensor
     ) -> torch.Tensor:
         return log_cosh_loss(y_pred, y_true)
+
+
+class_dict = {}
+module = importlib.import_module('torch.nn', package='torch')
+for name, cls in inspect.getmembers(module, inspect.isclass):
+    class_dict[name] = cls
+
+module = importlib.import_module('losses')
+for name, cls in inspect.getmembers(module, inspect.isclass):
+    if cls.__module__ == module.__name__:
+        class_dict[name] = cls 
+
+
+def load_losses(loss_type, loss_setting={}):
+    if loss_type not in class_dict:
+        raise NotImplementedError()
     
+    loss_class = class_dict[loss_type]
+    return loss_class(**loss_setting)

@@ -2,130 +2,86 @@ import torch
 import torch.nn as nn
 from .transformer_show_attention import CustomTransformerEncoderLayer, CustomTransformerEncoder
 from utils import get_device
+from losses import load_losses
 
+from .base_class import BaseModule
 from .pos_encoder import get_positional_encoding_1d
 
-class StackedDeepPMPadZero(nn.Module):
+class StackedDeepPMPadZero(BaseModule):
     """DeepPM model with Trasformer """
-    def __init__(self, cfg, is_show=False):
+    def __init__(self, 
+                dim=512, n_heads=8, dim_ff=2048, 
+                pad_idx=628, vocab_size=700, pred_drop=0.0,
+                num_basic_block_layer=2,
+                num_instruction_layer=2,
+                num_op_layer=4, loss_type='MapeLoss', loss_fn_arg={}):
         super().__init__()
 
         device = get_device(should_print=False)
+        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
+                                            batch_first=True)
+        self.basic_block_layer = nn.TransformerEncoder(block, num_basic_block_layer, enable_nested_tensor=False)
 
-        self.is_show = is_show
-        if self.is_show:
-            block = CustomTransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
-                                                batch_first=True)
-            self.f_block = CustomTransformerEncoder(block, 2, enable_nested_tensor=False)
+        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
+                                            batch_first=True)
+        self.instruction_layer = nn.TransformerEncoder(block, num_instruction_layer, enable_nested_tensor=False)
 
-            block = CustomTransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
-                                                batch_first=True)
-            self.s_block = CustomTransformerEncoder(block, 2, enable_nested_tensor=False)
-
-            block = CustomTransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
-                                                batch_first=True)
-            self.t_block = CustomTransformerEncoder(block, 4, enable_nested_tensor=False)
-        else:
-            block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
-                                                batch_first=True)
-            self.f_block = nn.TransformerEncoder(block, 2, enable_nested_tensor=False)
-
-            block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
-                                                batch_first=True)
-            self.s_block = nn.TransformerEncoder(block, 2, enable_nested_tensor=False)
-
-            block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
-                                                batch_first=True)
-            self.t_block = nn.TransformerEncoder(block, 4, enable_nested_tensor=False)
+        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
+                                            batch_first=True)
+        self.op_layer = nn.TransformerEncoder(block, num_op_layer, enable_nested_tensor=False)
 
 
-        self.pad_idx = cfg.pad_idx
-        self.embed = nn.Embedding(cfg.vocab_size, cfg.dim, padding_idx = cfg.pad_idx,
+        self.pad_idx = pad_idx
+        self.embed = nn.Embedding(vocab_size, dim, padding_idx = pad_idx,
                                 dtype=torch.float32, device=device) # token embedding
-        self.pos_embed = get_positional_encoding_1d(cfg.dim)
+        self.pos_embed = get_positional_encoding_1d(dim)
         self.prediction = nn.Sequential(
-            nn.Dropout(cfg.pred_drop),
-            nn.Linear(cfg.dim, 1, dtype=torch.float32)
+            nn.Dropout(pred_drop),
+            nn.Linear(dim, 1, dtype=torch.float32)
         )
+
+        self.loss = load_losses(loss_type, loss_fn_arg)
        
     def forward(self, x):
+        # Basic setup
+        batch_size, inst_size, seq_size = x.shape
         mask = x == self.pad_idx
+        op_seq_mask = mask.all(dim=-1)
+        output = self.embed(x)
 
-        t_output = self.embed(x)
-        batch_size, inst_size, seq_size, dim = t_output.shape
+        # Adding pos emb
+        output = output.view(batch_size * inst_size, seq_size, -1)
+        output = self.pos_embed(output)
 
-        t_output = t_output.view(batch_size * inst_size, seq_size, dim)
-        t_output = self.pos_embed(t_output)
-
-        t_output = t_output.view(batch_size, inst_size * seq_size, dim)
+        # Basic block layer
+        output = output.view(batch_size, inst_size * seq_size, -1)
         mask = mask.view(batch_size, inst_size * seq_size)
+        output = self.basic_block_layer(output, src_key_padding_mask=mask)
 
-        t_output = self.f_block(t_output, src_key_padding_mask=mask)
-        t_output = t_output.view(batch_size * inst_size, seq_size, dim)
+        # Instruction layer
+        output = output.view(batch_size * inst_size, seq_size, -1)
         mask = mask.view(batch_size * inst_size, seq_size)
+        op_seq_mask = op_seq_mask.view(batch_size * inst_size)
 
-        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 1)
+        output = output.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 1)
+        mod_mask = mask.masked_fill(op_seq_mask.unsqueeze(-1), False)
+        output = self.instruction_layer(output, src_key_padding_mask=mod_mask)
+        output = output.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 0)
 
-        mod_mask = mask.masked_fill(mask.all(dim=-1).unsqueeze(-1), False)
 
-        t_output = self.s_block(t_output, src_key_padding_mask=mod_mask)
-        
+        output = output[:,0,:]
+        output = output.view(batch_size, inst_size, -1)
+        output = self.pos_embed(output)
 
-        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 0)
+        op_seq_mask = op_seq_mask.view(batch_size, inst_size)
 
-        t_output = t_output[:,0,:]
-        t_output = t_output.view(batch_size, inst_size, dim)
-        i_output = self.pos_embed(t_output)
-        del t_output
-
-        mask = mask.view(batch_size, inst_size, seq_size)
-        mask = mask.all(dim=-1)
-
-        i_output = self.t_block(i_output, src_key_padding_mask=mask)
-        i_output = i_output.masked_fill(mask.unsqueeze(-1), 0)
-        i_output = i_output.sum(dim = 1)
-        out = self.prediction(i_output).squeeze(1)
+        output = self.op_layer(output, src_key_padding_mask=op_seq_mask)
+        output = output.masked_fill(op_seq_mask.unsqueeze(-1), 0)
+        output = output.sum(dim = 1)
+        out = self.prediction(output).squeeze(1)
 
         return out
     
-    def forward_show(self, x):
-        mask = x == self.pad_idx
-
-        t_output = self.embed(x)
-        batch_size, inst_size, seq_size, dim = t_output.shape
-
-        t_output = t_output.view(batch_size * inst_size, seq_size, dim)
-        t_output = self.pos_embed(t_output)
-
-        t_output = t_output.view(batch_size, inst_size * seq_size, dim)
-        mask = mask.view(batch_size, inst_size * seq_size)
-
-        t_output = self.f_block(t_output, src_key_padding_mask=mask)
-        t_output = t_output.view(batch_size * inst_size, seq_size, dim)
-        mask = mask.view(batch_size * inst_size, seq_size)
-
-        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 1)
-
-        mod_mask = mask.masked_fill(mask.all(dim=-1).unsqueeze(-1), False)
-
-        t_output = self.s_block(t_output, src_key_padding_mask=mod_mask)
-        
-
-        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 0)
-
-        t_output = t_output[:,0,:]
-        t_output = t_output.view(batch_size, inst_size, dim)
-        i_output = self.pos_embed(t_output)
-        del t_output
-
-        mask = mask.view(batch_size, inst_size, seq_size)
-        mask = mask.all(dim=-1)
-
-        i_output, attn = self.t_block.forward_show(i_output, src_key_padding_mask=mask)
-        i_output = i_output.masked_fill(mask.unsqueeze(-1), 0)
-        before_sum = i_output
-        i_output = i_output.sum(dim = 1)
-        out = self.prediction(i_output).squeeze(1)
-
-        return out, attn, before_sum
+    def get_loss(self):
+        return self.loss
     
