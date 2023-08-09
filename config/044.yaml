@@ -1,0 +1,51 @@
+model:
+  model_class: StackedDeepPMPadZero
+  model_setting:
+    dim: 512
+    n_heads: 8
+    dim_ff: 2048
+    pred_drop: 0.0
+    vocab_size: 700
+    loss_type: MapeLoss
+    num_basic_block_layer: 0
+    num_instruction_layer: 4
+    num_op_layer: 4
+    pad_idx: from:data.special_token_idx.PAD
+
+train:
+  seed: 3431
+  batch_size: 16
+  val_batch_size: 16
+  n_epochs: 30
+  warmup: 0.001
+  clip_grad_norm: 0.2
+  optimizer: Adam
+  optimizer_setting:
+    lr: 0.00001
+  lr_scheduler: LinearLR
+  use_batch_step_lr: false
+  lr_scheduler_setting:
+    total_iters: 5
+  hyperparameter_testing:
+    using: False
+    mult: 0.2
+
+data:
+  data_file: training_data/intel_core.data
+  data_setting:
+    only_unique: true
+    short_only: false
+    stacked: true
+  dataset_class: StackedBlockDataset
+  dataset_setting:
+    too_long_limit: 512
+  # raw_data: false
+  #  sample usage of predifined special token idxs
+  # special_token_idx:
+  #   PAD: 3
+  #   SRCS: 1
+  #   DSTS: 2
+  #   MEM: 3 # <MEM>
+  #   MEM_FIN: 4  # </MEM>
+  #   END: 5
+  #   UNK: 6 

@@ -141,7 +141,7 @@ class LossReporter(object):
         )))
         self.loss_report_file.write(message + '\n')
 
-        file_name = os.path.join(self.experiment.checkpoint_file_dir(),'{}.mdl'.format(self.epoch_no))
+        file_name = os.path.join(self.root_path, 'trained.mdl')
         self.check_point(model,optimizer, lr_scheduler, file_name)
 
 
@@ -220,6 +220,8 @@ Loss: {self.loss}
         
         if short_len > 0:
             loss_mod = short_len / result.batch_len if long_len > 0 else None
+            short_x = short_x.to(self.device)
+            short_y = short_y.to(self.device)
             loss, new_y, new_pred = self.model.run(short_x, short_y, loss_mod, is_train)
             result.measured.extend(new_y)
             result.prediction.extend(new_pred)
@@ -227,7 +229,9 @@ Loss: {self.loss}
         
         if long_len > 0:
             for x, y in zip(long_x, long_y):
-                loss, new_y, new_pred = self.model.run(x.unsqueeze(0), torch.tensor(y).unsqueeze(0), 1/result.batch_len, is_train)
+                input_x = x.unsqueeze(0).to(self.device)
+                input_y = torch.tensor(y).unsqueeze(0).to(self.device)
+                loss, new_y, new_pred = self.model.run(input_x, input_y, 1/result.batch_len, is_train)
                 result.measured.extend(new_y)
                 result.prediction.extend(new_pred)
                 result.loss += loss

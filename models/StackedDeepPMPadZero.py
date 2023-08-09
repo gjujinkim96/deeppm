@@ -17,18 +17,26 @@ class StackedDeepPMPadZero(BaseModule):
                 num_op_layer=4, loss_type='MapeLoss', loss_fn_arg={}):
         super().__init__()
 
+        self.num_basic_block_layer = num_basic_block_layer
+        self.num_instruction_layer = num_instruction_layer
+        self.num_op_layer = num_op_layer
+
         device = get_device(should_print=False)
-        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
-                                            batch_first=True)
-        self.basic_block_layer = nn.TransformerEncoder(block, num_basic_block_layer, enable_nested_tensor=False)
 
-        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
-                                            batch_first=True)
-        self.instruction_layer = nn.TransformerEncoder(block, num_instruction_layer, enable_nested_tensor=False)
+        if self.num_basic_block_layer > 0:
+            block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
+                                                batch_first=True)
+            self.basic_block_layer = nn.TransformerEncoder(block, num_basic_block_layer, enable_nested_tensor=False)
 
-        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
-                                            batch_first=True)
-        self.op_layer = nn.TransformerEncoder(block, num_op_layer, enable_nested_tensor=False)
+        if self.num_instruction_layer > 0:
+            block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
+                                                batch_first=True)
+            self.instruction_layer = nn.TransformerEncoder(block, num_instruction_layer, enable_nested_tensor=False)
+
+        if self.num_op_layer > 0:
+            block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
+                                                batch_first=True)
+            self.op_layer = nn.TransformerEncoder(block, num_op_layer, enable_nested_tensor=False)
 
 
         self.pad_idx = pad_idx
@@ -54,28 +62,34 @@ class StackedDeepPMPadZero(BaseModule):
         output = self.pos_embed(output)
 
         # Basic block layer
-        output = output.view(batch_size, inst_size * seq_size, -1)
-        mask = mask.view(batch_size, inst_size * seq_size)
-        output = self.basic_block_layer(output, src_key_padding_mask=mask)
+        if self.num_basic_block_layer > 0:
+            output = output.view(batch_size, inst_size * seq_size, -1)
+            mask = mask.view(batch_size, inst_size * seq_size)
+            output = self.basic_block_layer(output, src_key_padding_mask=mask)
 
         # Instruction layer
-        output = output.view(batch_size * inst_size, seq_size, -1)
-        mask = mask.view(batch_size * inst_size, seq_size)
-        op_seq_mask = op_seq_mask.view(batch_size * inst_size)
+        if self.num_instruction_layer > 0:
+            output = output.view(batch_size * inst_size, seq_size, -1)
+            mask = mask.view(batch_size * inst_size, seq_size)
+            op_seq_mask = op_seq_mask.view(batch_size * inst_size)
 
-        output = output.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 1)
-        mod_mask = mask.masked_fill(op_seq_mask.unsqueeze(-1), False)
-        output = self.instruction_layer(output, src_key_padding_mask=mod_mask)
-        output = output.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 0)
+            output = output.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 1)
+            mod_mask = mask.masked_fill(op_seq_mask.unsqueeze(-1), False)
+            output = self.instruction_layer(output, src_key_padding_mask=mod_mask)
+            output = output.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 0)
+
+        #  Selecting Op
+        output = output.view(batch_size, inst_size, seq_size, -1)
+        output = output[:,:, 0,:]
 
 
-        output = output[:,0,:]
-        output = output.view(batch_size, inst_size, -1)
-        output = self.pos_embed(output)
+        # Op layer
+        if self.num_op_layer > 0:
+            output = self.pos_embed(output)
+            op_seq_mask = op_seq_mask.view(batch_size, inst_size)
+            output = self.op_layer(output, src_key_padding_mask=op_seq_mask)
 
-        op_seq_mask = op_seq_mask.view(batch_size, inst_size)
 
-        output = self.op_layer(output, src_key_padding_mask=op_seq_mask)
         output = output.masked_fill(op_seq_mask.unsqueeze(-1), 0)
         output = output.sum(dim = 1)
         out = self.prediction(output).squeeze(1)

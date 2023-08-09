@@ -28,12 +28,13 @@ def load_model_from_cfg(cfg):
 
     return load_model(cfg.model.model_class, using_model_setting)
 
-def load_model(model_class, model_setting={}):
-    if model_class not in class_dict:
+def load_model(model_type, model_setting={}):
+    if model_type not in class_dict:
         raise NotImplementedError()
     
-    model = class_dict[model_class]
-    return model(**model_setting)
+    model_class = class_dict[model_type]
+    print(model_class)
+    return model_class(**model_setting)
 #     elif model_cfg.model_class == 'Ithemal':
 #         # model = 
 #         rnn_params = RnnParameters(
