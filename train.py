@@ -18,40 +18,40 @@ from torch.utils.data import DataLoader
 import multiprocessing
 import pandas as pd
 from operator import itemgetter
-from utils import correct_regression, seed_worker, get_worker_generator
+from utils import correct_regression, seed_worker, get_worker_generator, mape_batch
 # import plotting
 
 
-class Config(NamedTuple):
-    """ Hyperparameters for training """
-    lr_scheduler: str = "LinearLR"
-    optimizer: str = "Adam"
-    clip_grad_norm: float = 0.2
-    loss_fn: str = "mape"
-    seed: int = 3431 # random seed
-    batch_size: int = 32
-    val_batch_size: int = 32
-    lr: int = 5e-5 # learning rate
-    lr_total_iters: int = 5
-    n_epochs: int = 10 # the number of epoch
-    # `warm up` period = warmup(0.1)*total_steps
-    # linearly increasing learning rate from zero to the specified value(5e-5)
-    warmup: float = 0.001
-    checkpoint: bool = False
-    raw_data: bool = False
-    use_batch_step_lr: bool = False
-    hyperparameter_test: bool = False
-    hyperparameter_test_mult: float = 0.2
-    short_only: bool = False
-    long_rev: bool = False
-    fixed_vocab: bool = False
+# class Config(NamedTuple):
+#     """ Hyperparameters for training """
+#     lr_scheduler: str = "LinearLR"
+#     optimizer: str = "Adam"
+#     clip_grad_norm: float = 0.2
+#     loss_fn: str = "mape"
+#     seed: int = 3431 # random seed
+#     batch_size: int = 32
+#     val_batch_size: int = 32
+#     lr: int = 5e-5 # learning rate
+#     lr_total_iters: int = 5
+#     n_epochs: int = 10 # the number of epoch
+#     # `warm up` period = warmup(0.1)*total_steps
+#     # linearly increasing learning rate from zero to the specified value(5e-5)
+#     warmup: float = 0.001
+#     checkpoint: bool = False
+#     raw_data: bool = False
+#     use_batch_step_lr: bool = False
+#     hyperparameter_test: bool = False
+#     hyperparameter_test_mult: float = 0.2
+#     short_only: bool = False
+#     long_rev: bool = False
+#     fixed_vocab: bool = False
     
-    #save_steps: int = 100 # interval for saving model
-    #total_steps: int = 100000 # total number of steps to train
+#     #save_steps: int = 100 # interval for saving model
+#     #total_steps: int = 100000 # total number of steps to train
 
-    @classmethod
-    def from_json(cls, file): # load config from json file
-        return cls(**json.load(open(file, "r")))
+#     @classmethod
+#     def from_json(cls, file): # load config from json file
+#         return cls(**json.load(open(file, "r")))
 
 class LossReporter(object):
     def __init__(self, experiment, n_data_points):
@@ -158,7 +158,7 @@ class Trainer(object):
     def __init__(self, cfg, model, ds, expt, optimizer, lr_scheduler, device, small_training):
         self.cfg = cfg # config for training : see class Config
         self.model = model
-        self.train_ds, self.test_ds = ds
+        self.train_ds, self.val_ds, self.test_ds = ds
         self.expt = expt
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
@@ -191,6 +191,8 @@ class Trainer(object):
             
             self.loss = 0
             self.loss_sum = 0
+            self.mape = 0
+            self.mape_sum = 0
 
         def __iadd__(self, other):
             self.batch_len += other.batch_len
@@ -201,6 +203,9 @@ class Trainer(object):
 
             self.loss += other.loss
             self.loss_sum += other.loss_sum
+
+            self.mape += other.mape
+            self.mape_sum += other.mape_sum
             return self
         
         def __repr__(self):
@@ -223,8 +228,14 @@ Loss: {self.loss}
             short_x = short_x.to(self.device)
             short_y = short_y.to(self.device)
             loss, new_y, new_pred = self.model.run(short_x, short_y, loss_mod, is_train)
+
             result.measured.extend(new_y)
             result.prediction.extend(new_pred)
+
+            mape_score = mape_batch(new_pred, new_y)
+            if loss_mod is not None:
+                mape_score *= loss_mod
+            result.mape += mape_score
             result.loss += loss
         
         if long_len > 0:
@@ -234,19 +245,25 @@ Loss: {self.loss}
                 loss, new_y, new_pred = self.model.run(input_x, input_y, 1/result.batch_len, is_train)
                 result.measured.extend(new_y)
                 result.prediction.extend(new_pred)
+                mape_score = mape_batch(new_pred, new_y)
+                mape_score /= result.batch_len
+
+                result.mape += mape_score
                 result.loss += loss
         
         result.loss_sum = result.loss * result.batch_len
+        result.mape_sum = result.mape * result.batch_len
         return result
     
-    def validate(self, resultfile, epoch):
+    def validate(self, resultfile, epoch, is_test=False):
         self.model.eval()
         self.model.to(self.device)
 
         f = open(resultfile,'w')
 
-        loader = DataLoader(self.test_ds, shuffle=False, num_workers=self.cpu_count,
-            batch_size=self.cfg.train.val_batch_size, collate_fn=self.test_ds.collate_fn)
+        ds = self.test_ds if is_test else self.val_ds
+        loader = DataLoader(ds, shuffle=False, num_workers=self.cpu_count,
+            batch_size=self.cfg.train.val_batch_size, collate_fn=ds.collate_fn)
         epoch_result = self.BatchResult()
 
         with torch.no_grad():
@@ -254,15 +271,20 @@ Loss: {self.loss}
                 epoch_result += self.run_batch(batch, is_train=False)
 
         epoch_result.loss = epoch_result.loss_sum / epoch_result.batch_len 
+        epoch_result.mape = epoch_result.mape_sum / epoch_result.batch_len
         correct = correct_regression(epoch_result.prediction, epoch_result.measured, 25)
         f.write(f'loss - {epoch_result.loss}\n')
         f.write(f'{correct}, {epoch_result.batch_len}\n')
         f.close()
 
-        print(f'Validate: loss - {epoch_result.loss}\n\t{correct}/{epoch_result.batch_len} = {correct / epoch_result.batch_len}\n')
+
+        print(f'{"Test" if is_test else "Validate"}: loss - {epoch_result.loss}\n\t{correct}/{epoch_result.batch_len} = {correct / epoch_result.batch_len}\n')
         print()
 
-        wandb_log.wandb_log_val(epoch_result, epoch)
+        if is_test:
+            wandb_log.wandb_log_test(epoch_result)
+        else:
+            wandb_log.wandb_log_val(epoch_result, epoch)
 
     def train(self):
         """ Train Loop """
@@ -315,5 +337,8 @@ Loss: {self.loss}
             self.validate(resultfile, epoch_no + 1)
             if not self.cfg.train.use_batch_step_lr:
                 self.lr_scheduler.step()
+
+        if len(self.test_ds) > 0:
+            self.validate(resultfile, epoch_no + 1, is_test=True)
         self.loss_reporter.finish(self.model, self.optimizer, self.lr_scheduler)
 

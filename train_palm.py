@@ -147,7 +147,7 @@ class Trainer(object):
     def __init__(self, train_cfg, model, ds, expt, optimizer, lr_scheduler, loss_fn, device, small_training):
         self.train_cfg = train_cfg # config for training : see class Config
         self.model = model
-        self.train_ds, self.test_ds = ds
+        self.train_ds, self.val_ds = ds
         self.expt = expt
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler

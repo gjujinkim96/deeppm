@@ -49,7 +49,7 @@ def main():
     cfg.data.special_token_idx = dict_to_simple_namespace(special_token_idx)
 
     device = get_device()
-    train_ds, test_ds = ds.load_dataset_from_cfg(data, cfg, show=True)
+    train_ds, val_ds, test_ds = ds.load_dataset_from_cfg(data, cfg, show=True)
 
     model = models.load_model_from_cfg(cfg)
 
@@ -62,7 +62,7 @@ def main():
     lr_scheduler = lr_sch.load_lr_scheduler_from_cfg(optimizer, cfg)
     # loss_fn = losses.load_loss_fn(train_cfg)
 
-    # if train_cfg.checkpoint and \
+    # if getattr(cfg.train, 'checkpoint', False) and \
     #     not (hasattr(model.__class__, 'checkpoint_forward') and callable(getattr(model.__class__, 'checkpoint_forward'))):
     #     print('Using gradient checkpointing but model support no gradient checkpointing')
     #     print('Model must implement checkpoint_forward method to use gradient checkpointing')
@@ -71,9 +71,9 @@ def main():
     wandb_log.wandb_init(args,cfg)
     
     dump_obj_to_root(expt, cfg, 'config.dump')
-    dump_obj_to_root(expt, data.test_idx, 'test_idx.dump')
+    dump_idx_to_root(expt, data)
 
-    trainer = train.Trainer(cfg, model, (train_ds, test_ds), expt, 
+    trainer = train.Trainer(cfg, model, (train_ds, val_ds, test_ds), expt, 
                             optimizer, lr_scheduler, device, args.small_training)
 
     # with torch.autograd.detect_anomaly():

@@ -33,7 +33,6 @@ def load_model(model_type, model_setting={}):
         raise NotImplementedError()
     
     model_class = class_dict[model_type]
-    print(model_class)
     return model_class(**model_setting)
 #     elif model_cfg.model_class == 'Ithemal':
 #         # model = 

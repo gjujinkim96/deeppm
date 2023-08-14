@@ -6,7 +6,7 @@ from losses import load_losses
 from .base_class import BaseModule
 from .pos_encoder import get_positional_encoding_1d
 
-class StackedDeepPMPadZero(BaseModule):
+class PadZeroAttentionPooling(BaseModule):
     """DeepPM model with Trasformer """
     def __init__(self, 
                 dim=512, n_heads=8, dim_ff=2048, 
@@ -47,6 +47,8 @@ class StackedDeepPMPadZero(BaseModule):
             nn.Linear(dim, 1, dtype=torch.float32)
         )
 
+        self.pooling = nn.MultiheadAttention(dim, n_heads, device=device, batch_first=True)
+        self.pool_emb = nn.Embedding(1, dim, dtype=torch.float32, device=device)
         self.loss = load_losses(loss_type, loss_fn_arg)
        
     def forward(self, x):
@@ -78,14 +80,23 @@ class StackedDeepPMPadZero(BaseModule):
             output = output.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 0)
 
         #  Selecting Op
-        output = output.view(batch_size, inst_size, seq_size, -1)
-        op_seq_mask = op_seq_mask.view(batch_size, inst_size)
-        output = output[:,:, 0,:]
+        output = output.view(batch_size * inst_size, seq_size, -1)
+        pool_emb = self.pool_emb(torch.zeros(1, 1, device=output.device, dtype=torch.int))
+        pool_emb = pool_emb.expand(batch_size * inst_size, -1, -1)
+        mask = mask.view(batch_size * inst_size, seq_size)
+
+        output = output.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 1)
+        mod_mask = mask.masked_fill(op_seq_mask.unsqueeze(-1), False)
+        output = self.pooling(pool_emb, output, output, key_padding_mask=mod_mask)[0]
+        output = output.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 0)
+
+        output = output.view(batch_size, inst_size, -1)
 
 
         # Op layer
         if self.num_op_layer > 0:
             output = self.pos_embed(output)
+            op_seq_mask = op_seq_mask.view(batch_size, inst_size)
             output = self.op_layer(output, src_key_padding_mask=op_seq_mask)
 
 

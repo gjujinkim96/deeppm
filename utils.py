@@ -125,3 +125,9 @@ def correct_regression(pred, answer, tolerance):
 
     percentage = abs(pred - answer) * 100.0 / (answer + 1e-3)
     return sum(percentage < tolerance)
+
+def mape(pred, measure):
+    return abs(pred-measure) / (measure + 1e-5)
+
+def mape_batch(preds, measures):
+    return sum([mape(pred, measure) for (pred, measure) in zip(preds, measures)]) / len(preds)

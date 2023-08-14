@@ -5,30 +5,30 @@ from utils import get_device
 from .pos_encoder import get_positional_encoding_1d
 
 class InstBlockOp(nn.Module):
-    def __init__(self, cfg):
+    def __init__(self, dim, n_heads, dim_ff, vocab_size=700, pad_idx=0, pred_drop=0.0):
         super().__init__()
 
         device = get_device(should_print=False)
-        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
+        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
                                             batch_first=True)
         self.f_block = nn.TransformerEncoder(block, 2, enable_nested_tensor=False)
 
-        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
+        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
                                             batch_first=True)
         self.s_block = nn.TransformerEncoder(block, 2, enable_nested_tensor=False)
 
-        block = nn.TransformerEncoderLayer(cfg.dim, cfg.n_heads, device=device, dim_feedforward=cfg.dim_ff,
+        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
                                             batch_first=True)
         self.t_block = nn.TransformerEncoder(block, 4, enable_nested_tensor=False)
 
 
-        self.pad_idx = cfg.pad_idx
-        self.embed = nn.Embedding(cfg.vocab_size, cfg.dim, padding_idx = cfg.pad_idx,
+        self.pad_idx = pad_idx
+        self.embed = nn.Embedding(vocab_size, dim, padding_idx = pad_idx,
                                 dtype=torch.float32, device=device) # token embedding
-        self.pos_embed = get_positional_encoding_1d(cfg.dim)
+        self.pos_embed = get_positional_encoding_1d(dim)
         self.prediction = nn.Sequential(
-            nn.Dropout(cfg.pred_drop),
-            nn.Linear(cfg.dim, 1, dtype=torch.float32)
+            nn.Dropout(pred_drop),
+            nn.Linear(dim, 1, dtype=torch.float32)
         )
        
     def forward(self, x, debug=False):

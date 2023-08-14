@@ -6,7 +6,7 @@ from losses import load_losses
 from .base_class import BaseModule
 from .pos_encoder import get_positional_encoding_1d
 
-class StackedDeepPMPadZero(BaseModule):
+class LogPadZero(BaseModule):
     """DeepPM model with Trasformer """
     def __init__(self, 
                 dim=512, n_heads=8, dim_ff=2048, 
@@ -79,13 +79,13 @@ class StackedDeepPMPadZero(BaseModule):
 
         #  Selecting Op
         output = output.view(batch_size, inst_size, seq_size, -1)
-        op_seq_mask = op_seq_mask.view(batch_size, inst_size)
         output = output[:,:, 0,:]
 
 
         # Op layer
         if self.num_op_layer > 0:
             output = self.pos_embed(output)
+            op_seq_mask = op_seq_mask.view(batch_size, inst_size)
             output = self.op_layer(output, src_key_padding_mask=op_seq_mask)
 
 
@@ -97,4 +97,32 @@ class StackedDeepPMPadZero(BaseModule):
     
     def get_loss(self):
         return self.loss
+    
+    def run_train(self, x, y, loss_mod=None):
+        output = self.forward(x)
+        loss_fn = self.get_loss()
+
+        log_y = torch.log(y + 1e-5)
+        loss = loss_fn(output, log_y)
+
+        if loss_mod is not None:
+            loss *= loss_mod
+        loss.backward()
+
+        output = torch.exp(output)
+
+        return loss.item(), y.tolist(), output.tolist()
+
+    def run_val(self, x, y, loss_mod=None):
+        output = self.forward(x)
+        loss_fn = self.get_loss()
+
+        log_y = torch.log(y + 1e-5)
+        loss = loss_fn(output, y)
+        
+        if loss_mod is not None:
+            loss *= loss_mod
+
+        output = torch.exp(output)
+        return loss.item(), y.tolist(), output.tolist()
     

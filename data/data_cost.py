@@ -22,11 +22,23 @@ from collections import defaultdict
 
 
 class DataItem:
-    def __init__(self, x, y, block, code_id):
+    def __init__(self, x, y, block, code_id, src=None):
         self.x = x
         self.y = y
         self.block = block
         self.code_id = code_id
+        self.src = src
+
+    def __repr__(self):
+        return f'---- Block ----\n{self.block}\nX: {self.x}  Y: {self.y}'
+
+class DataItemWithSim:
+    def __init__(self, x, y, block, code_id, sim):
+        self.x = x
+        self.y = y
+        self.block = block
+        self.code_id = code_id
+        self.sim = sim
 
     def __repr__(self):
         return f'---- Block ----\n{self.block}\nX: {self.x}  Y: {self.y}'
@@ -147,7 +159,7 @@ class DataInstructionEmbedding(Data):
             self.raw.append(readable_raw)
 
 
-    def prepare_stacked_data(self, progress=True):
+    def prepare_stacked_data(self, progress=True, src_df=None):
         
         self.pad_idx = self.hot_idxify('<PAD>')
 
@@ -204,6 +216,7 @@ class DataInstructionEmbedding(Data):
                     raw_instr.append('<END>')
                     raw_instrs.append(list(map(self.hot_idxify, raw_instr)))
                     readable_instrs.append(raw_instr)
+
                     instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
                     instrs[-1].intel = m_code_intel
             if len(raw_instrs) > 400:
@@ -211,7 +224,92 @@ class DataInstructionEmbedding(Data):
 
             block = ut.BasicBlock(instrs)
             block.create_dependencies()
-            datum = DataItem(raw_instrs, timing, block, code_id)
+
+            if src_df is not None:
+                src_type = src_df.loc[code_id].mapping
+                datum = DataItem(raw_instrs, timing, block, code_id, src_type)
+            else:
+                datum = DataItem(raw_instrs, timing, block, code_id)
+            self.data.append(datum)
+
+            self.raw.append(readable_instrs)
+
+    def prepare_simplified(self, progress=True):
+        sim_mapping = {}
+        def sim_idxify(token):
+            if token not in sim_mapping:
+                sim_mapping[token] = len(sim_mapping)
+            return sim_mapping[token]
+            
+        self.pad_idx = self.hot_idxify('<PAD>')
+        sim_idxify('<PAD>')
+
+        if progress:
+            iterator = tqdm(self.raw_data)
+        else:
+            iterator = self.raw_data
+
+        for (code_id, timing, code_intel, code_xml) in iterator:
+            block_root = ET.fromstring(code_xml)
+            instrs = []
+            raw_instrs = []
+            readable_instrs = []
+            curr_mem = self.mem_start
+            sims = []
+            for _ in range(1): # repeat for duplicated blocks
+                # handle missing or incomplete code_intel
+                split_code_intel = itertools.chain((code_intel or '').split('\n'), itertools.repeat(''))
+                for (instr, m_code_intel) in zip(block_root, split_code_intel):
+                    raw_instr = []
+                    opcode = int(instr.find('opcode').text)
+                    src_mem_cnt = 0
+                    dst_mem_cnt = 0
+                    raw_instr.extend([opcode, '<SRCS>'])
+                    
+                    srcs = []
+                    for src in instr.find('srcs'):
+                        if src.find('mem') is not None:
+                            raw_instr.append('<MEM>')
+                            for mem_op in src.find('mem'):
+                                raw_instr.append(int(mem_op.text))
+                                srcs.append(int(mem_op.text))
+                            raw_instr.append('</MEM>')
+                            srcs.append(curr_mem)
+                            curr_mem += 1
+                            src_mem_cnt += 1
+                        else:
+                            raw_instr.append(int(src.text))
+                            srcs.append(int(src.text))
+
+                    raw_instr.append('<DSTS>')
+                    dsts = []
+                    for dst in instr.find('dsts'):
+                        if dst.find('mem') is not None:
+                            raw_instr.append('<MEM>')
+                            for mem_op in dst.find('mem'):
+                                raw_instr.append(int(mem_op.text))
+                                # operands used to calculate dst mem ops are sources
+                                srcs.append(int(mem_op.text))
+                            raw_instr.append('</MEM>')
+                            dsts.append(curr_mem)
+                            curr_mem += 1
+                            dst_mem_cnt += 1
+                        else:
+                            raw_instr.append(int(dst.text))
+                            dsts.append(int(dst.text))
+
+                    raw_instr.append('<END>')
+                    raw_instrs.append(list(map(self.hot_idxify, raw_instr)))
+                    readable_instrs.append(raw_instr)
+                    instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
+                    instrs[-1].intel = m_code_intel
+                    sims.append(sim_idxify(f'{opcode}_{src_mem_cnt}_{dst_mem_cnt}'))
+            if len(raw_instrs) > 400:
+                continue
+
+            block = ut.BasicBlock(instrs)
+            block.create_dependencies()
+            datum = DataItemWithSim(raw_instrs, timing, block, code_id, sims)
             self.data.append(datum)
 
             self.raw.append(readable_instrs)
@@ -235,8 +333,11 @@ def extract_unique(data, raw):
     print(f'{len(cleaned)} unique data found!')
     return cleaned, cleaned_raw
 
-def load_data(data_savefile, small_size=False, stacked=False, only_unique=False, hyperparameter_test=False,
-                    hyperparameter_test_mult=0.2, short_only=False, special_tokens=None):
+def load_data(data_savefile, small_size=False, stacked=False, only_unique=False, split_mode='none', split_perc=(8, 2, 0), hyperparameter_test=False,
+                    hyperparameter_test_mult=0.2, special_tokens=None, simplify=False, src_info_file=None):
+    '''
+    split_mode: num_instrs+srcs, num_instrs, none
+    '''
     data = DataInstructionEmbedding(special_tokens=special_tokens)
 
     if small_size:
@@ -245,16 +346,27 @@ def load_data(data_savefile, small_size=False, stacked=False, only_unique=False,
         data.raw_data = torch.load(data_savefile)
     data.read_meta_data()
 
-    if stacked:
-        data.prepare_stacked_data()
+    if src_info_file is not None:
+        src_df = pd.read_csv(src_info_file, index_col='idx')
     else:
+        src_df = None
+
+    if simplify:
+        raise NotImplementedError()
+        data.prepare_simplified()
+    elif stacked:
+        data.prepare_stacked_data(src_df=src_df)
+    else:
+        raise NotImplementedError()
         data.prepare_data()
 
     if only_unique:
         data.data, data.raw = extract_unique(data.data, data.raw)
-        
-    data.generate_datasets(hyperparameter_test=hyperparameter_test, 
+
+    # change test pert or some way to split train, val test in constructor? no in generate dataset!!
+    #  remove self.perct in base class
+    data.generate_datasets(split_mode=split_mode, split_perc=split_perc, hyperparameter_test=hyperparameter_test, 
                         hyperparameter_test_mult=hyperparameter_test_mult,
-                        short_only=short_only)
+                        )
 
     return data

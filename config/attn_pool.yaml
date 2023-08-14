@@ -1,5 +1,5 @@
 model:
-  model_class: StackedDeepPMPadZero
+  model_class: PadZeroAttentionPooling
   model_setting:
     dim: 512
     n_heads: 8
@@ -31,25 +31,21 @@ train:
     mult: 0.2
 
 data:
-  data_file: training_data/skl.data
-  src_info_file: training_data/skl_mapping.csv
+  data_file: training_data/intel_core.data
   data_setting:
     only_unique: true
+    short_only: false
     stacked: true
-    split_mode: num_instrs+srcs
-    train_perc: 7
-    val_perc: 2
-    test_perc: 1
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512
   # raw_data: false
   #  sample usage of predifined special token idxs
-  special_token_idx:
-    PAD: 0
-    SRCS: 1
-    DSTS: 2
-    MEM: 3 # <MEM>
-    MEM_FIN: 4  # </MEM>
-    END: 5
-    UNK: 6 
+  # special_token_idx:
+    # PAD: 3
+  #   SRCS: 1
+  #   DSTS: 2
+  #   MEM: 3 # <MEM>
+  #   MEM_FIN: 4  # </MEM>
+  #   END: 5
+  #   UNK: 6 

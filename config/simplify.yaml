@@ -1,5 +1,5 @@
 model:
-  model_class: StackedDeepPMPadZero
+  model_class: PadZeroSimp
   model_setting:
     dim: 512
     n_heads: 8
@@ -7,9 +7,7 @@ model:
     pred_drop: 0.0
     vocab_size: 700
     loss_type: MapeLoss
-    num_basic_block_layer: 2
-    num_instruction_layer: 2
-    num_op_layer: 4
+    num_op_layer: 16
     pad_idx: from:data.special_token_idx.PAD
 
 train:
@@ -31,16 +29,13 @@ train:
     mult: 0.2
 
 data:
-  data_file: training_data/skl.data
-  src_info_file: training_data/skl_mapping.csv
+  data_file: training_data/intel_core.data
   data_setting:
     only_unique: true
+    short_only: false
     stacked: true
-    split_mode: num_instrs+srcs
-    train_perc: 7
-    val_perc: 2
-    test_perc: 1
-  dataset_class: StackedBlockDataset
+    simplify: true
+  dataset_class: SimplifyDataset
   dataset_setting:
     too_long_limit: 512
   # raw_data: false
