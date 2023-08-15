@@ -5,14 +5,15 @@ from utils import recursive_vars
 def wandb_init(args, cfg):
     mode = 'disabled' if args.wandb_disabled else 'online'
     # model_cfg, train_cfg, train_data_len):
-    tags = ['v3_sk']
+    # tags = ['v3_sk']
+    tags = ['v2_unique_updated']
     if cfg.train.hyperparameter_testing.using:
         tags.append('hyper')
 
     config = recursive_vars(cfg)
     config['small_size'] = args.small_size
     config['small_training'] = args.small_training
-    run = wandb.init(
+    wandb.init(
         project='deeppm',
         config=config,
         mode=mode,
@@ -20,8 +21,8 @@ def wandb_init(args, cfg):
         tags=tags,
     )
 
-    run.log_code(include_fn=lambda path: path.endswith(".py") or \
-                path.endswith(".sh") or path.endswith(".json")) or path.endswith(".yaml")
+    wandb.run.log_code(include_fn=lambda path: path.endswith(".py") or \
+                path.endswith(".sh") or path.endswith(".json") or path.endswith(".yaml"))
 
 
 def wandb_finish():
@@ -57,14 +58,17 @@ def wandb_log_val(er, epoch):
     df['mape'] = abs(df.predicted - df.measured) * 100 / (df.measured + 1e-5)
 
     logging_dict = {
-        "loss/Validation": er.loss,
+        "loss/Validation": er.loss['loss'],
         "mape/Validation": er.mape,
         'epoch': epoch,
     }
 
-    # print(len(er.prediction), len(er.measured))
+    for k in er.loss:
+        if k != 'loss':
+            logging_dict[f'{k}/Validation'] = er.loss[k]
+
+
     scatter_data = [[x, y] for (x, y) in zip(df.predicted, df.measured)]
-    # print(data)
     scatter_table = wandb.Table(data=scatter_data, columns = ["Predicted", "Measured"])
     logging_dict["val/summary/scatter"] = wandb.plot.scatter(scatter_table, "Predicted", "Measured", title="Measured vs. Predicted")
 
@@ -98,8 +102,8 @@ def wandb_log_val(er, epoch):
     global best_val_loss
     global best_25_accuracy
 
-    if er.loss < best_val_loss:
-        best_val_loss = er.loss
+    if er.loss['loss'] < best_val_loss:
+        best_val_loss = er.loss['loss']
         wandb.run.summary['best_loss'] = best_val_loss
     
     cur_accuracy = (df.mape < 25).mean().item()
@@ -119,12 +123,14 @@ def wandb_log_test(er):
     logging_dict = {
     }
 
-    wandb.run.summary['test/loss'] = er.loss
+    for k in er.loss:
+        wandb.run.summary[f'test/{k}'] = er.loss[k]
+
     wandb.run.summary['test/mape'] = er.mape
 
-    # print(len(er.prediction), len(er.measured))
+    
     scatter_data = [[x, y] for (x, y) in zip(df.predicted, df.measured)]
-    # print(data)
+    
     scatter_table = wandb.Table(data=scatter_data, columns = ["Predicted", "Measured"])
     logging_dict["test/summary/scatter"] = wandb.plot.scatter(scatter_table, "Predicted", "Measured", title="Measured vs. Predicted")
 
@@ -166,11 +172,15 @@ def wandb_log_train(br, lr, epoch):
     df['mape'] = abs(df.predicted - df.measured) * 100 / (df.measured + 1e-5)
 
     logging_dict = {
-        "loss/Train": br.loss,
+        "loss/Train": br.loss['loss'],
         "mape/Train": br.mape,
         "lr": lr,
         'epoch': epoch,
     }
+
+    for k in br.loss:
+        if k != 'loss':
+            logging_dict[f'{k}/Train'] = br.loss[k]
 
     thresholds = [25, 20, 15, 10, 5, 3]
     for threshold in thresholds:

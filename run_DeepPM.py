@@ -30,7 +30,7 @@ def main():
 
     data = load_data_from_cfg(args, cfg)
 
-    special_tokens = ['PAD', 'SRCS', 'DSTS', 'UNK', 'END', 'MEM', "MEM_FIN"]
+    special_tokens = ['PAD', 'SRCS', 'DSTS', 'UNK', 'END', 'MEM', "MEM_FIN", "START", "OP", "INS_START", "INS_END"]
     if getattr(cfg.data, 'special_token_idx', None) is None:
         special_token_idx = {}
     else:
@@ -55,21 +55,18 @@ def main():
 
     optimizer = opt.load_optimizer_from_cfg(model, cfg)
 
-    # if train_cfg.use_batch_step_lr:
-    # training_step = (len(train_ds) + cfg.train.batch_size - 1) / cfg.train.batch_size
-    #     lr_scheduler = lr_sch.load_batch_step_lr_scheduler(optimizer, train_cfg, total_batch)
-    # else:
-    lr_scheduler = lr_sch.load_lr_scheduler_from_cfg(optimizer, cfg)
-    # loss_fn = losses.load_loss_fn(train_cfg)
-
-    # if getattr(cfg.train, 'checkpoint', False) and \
-    #     not (hasattr(model.__class__, 'checkpoint_forward') and callable(getattr(model.__class__, 'checkpoint_forward'))):
-    #     print('Using gradient checkpointing but model support no gradient checkpointing')
-    #     print('Model must implement checkpoint_forward method to use gradient checkpointing')
-    #     return 1
+    
+    if cfg.train.use_batch_step_lr:
+        training_step = int((len(train_ds) + cfg.train.batch_size - 1) / cfg.train.batch_size)
+        total_step = training_step * cfg.train.n_epochs
+        lr_scheduler = lr_sch.load_batch_lr_scheduler_from_cfg(optimizer, cfg, total_step)
+    else:
+        lr_scheduler = lr_sch.load_lr_scheduler_from_cfg(optimizer, cfg)
+    
 
     wandb_log.wandb_init(args,cfg)
     
+    dump_obj_to_root(expt, data.dump_dataset_params(), 'data_mapping.dump')
     dump_obj_to_root(expt, cfg, 'config.dump')
     dump_idx_to_root(expt, data)
 

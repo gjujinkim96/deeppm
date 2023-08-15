@@ -1,2 +1,2 @@
-python run_DeepPM.py --cfg config/baseline.yaml --exp_name skl_baseline --exp_override 
+python run_DeepPM.py --cfg config/maskedlang.yaml --exp_name maskedlang --exp_override 
 #  --exp_override

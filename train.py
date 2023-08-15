@@ -20,6 +20,7 @@ import pandas as pd
 from operator import itemgetter
 from utils import correct_regression, seed_worker, get_worker_generator, mape_batch
 # import plotting
+from collections import defaultdict
 
 
 # class Config(NamedTuple):
@@ -189,8 +190,8 @@ class Trainer(object):
             self.prediction = []
             self.inst_lens = []
             
-            self.loss = 0
-            self.loss_sum = 0
+            self.loss = defaultdict(lambda: 0)
+            self.loss_sum = defaultdict(lambda: 0)
             self.mape = 0
             self.mape_sum = 0
 
@@ -201,8 +202,10 @@ class Trainer(object):
             self.prediction.extend(other.prediction)
             self.inst_lens.extend(other.inst_lens)
 
-            self.loss += other.loss
-            self.loss_sum += other.loss_sum
+
+            for k in self.loss.keys() | other.loss.keys():
+                self.loss[k] += other.loss[k]
+                self.loss_sum[k] += other.loss_sum[k]
 
             self.mape += other.mape
             self.mape_sum += other.mape_sum
@@ -228,7 +231,6 @@ Loss: {self.loss}
             short_x = short_x.to(self.device)
             short_y = short_y.to(self.device)
             loss, new_y, new_pred = self.model.run(short_x, short_y, loss_mod, is_train)
-
             result.measured.extend(new_y)
             result.prediction.extend(new_pred)
 
@@ -236,7 +238,8 @@ Loss: {self.loss}
             if loss_mod is not None:
                 mape_score *= loss_mod
             result.mape += mape_score
-            result.loss += loss
+            for k in loss:
+                result.loss[k] += loss[k]
         
         if long_len > 0:
             for x, y in zip(long_x, long_y):
@@ -249,9 +252,12 @@ Loss: {self.loss}
                 mape_score /= result.batch_len
 
                 result.mape += mape_score
-                result.loss += loss
+                for k in loss:
+                    result.loss[k] += loss[k]
         
-        result.loss_sum = result.loss * result.batch_len
+        for k in result.loss:
+            result.loss_sum[k] = result.loss[k] * result.batch_len
+        
         result.mape_sum = result.mape * result.batch_len
         return result
     
@@ -270,7 +276,9 @@ Loss: {self.loss}
             for batch in tqdm(loader):
                 epoch_result += self.run_batch(batch, is_train=False)
 
-        epoch_result.loss = epoch_result.loss_sum / epoch_result.batch_len 
+        
+        for k in epoch_result.loss:
+            epoch_result.loss[k] = epoch_result.loss_sum[k] / epoch_result.batch_len 
         epoch_result.mape = epoch_result.mape_sum / epoch_result.batch_len
         correct = correct_regression(epoch_result.prediction, epoch_result.measured, 25)
         f.write(f'loss - {epoch_result.loss}\n')
@@ -278,7 +286,7 @@ Loss: {self.loss}
         f.close()
 
 
-        print(f'{"Test" if is_test else "Validate"}: loss - {epoch_result.loss}\n\t{correct}/{epoch_result.batch_len} = {correct / epoch_result.batch_len}\n')
+        print(f'{"Test" if is_test else "Validate"}: loss - {epoch_result.loss["loss"]}\n\t{correct}/{epoch_result.batch_len} = {correct / epoch_result.batch_len}\n')
         print()
 
         if is_test:
@@ -322,13 +330,15 @@ Loss: {self.loss}
 
 
                 step += 1
-                epoch_loss_sum += batch_result.loss_sum
+            
+                epoch_loss_sum += batch_result.loss_sum['loss']
                 total_cnts += batch_result.batch_len
                 total_correct += correct_regression(batch_result.prediction, batch_result.measured, 25)
                 self.loss_reporter.report(batch_result.batch_len, 
-                                    batch_result.loss, epoch_loss_sum/step, total_correct/total_cnts)   
+                                    batch_result.loss['loss'], epoch_loss_sum/step, total_correct/total_cnts)   
 
                 if self.cfg.train.use_batch_step_lr:
+                    print('batch step:', self.lr_scheduler.get_last_lr()[0])
                     self.lr_scheduler.step()
               
             epoch_loss_avg = epoch_loss_sum / step

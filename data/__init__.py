@@ -7,6 +7,7 @@ def load_data_from_cfg(args, cfg):
         special_tokens = recursive_vars(special_tokens)
 
     data_setting = cfg.data.data_setting
+
     data = dt.load_data(
         cfg.data.data_file, 
         small_size=args.small_size,
@@ -18,7 +19,8 @@ def load_data_from_cfg(args, cfg):
         hyperparameter_test_mult=cfg.train.hyperparameter_testing.mult,
         special_tokens=special_tokens,
         simplify=getattr(data_setting, 'simplify', False),
-        src_info_file=cfg.data.src_info_file,
+        src_info_file=getattr(cfg.data, 'src_info_file', None),
+        bert=data_setting.bert
     )
 
     return data
