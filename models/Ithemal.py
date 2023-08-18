@@ -524,10 +524,11 @@ def get_last_false_values(x, mask, dim):
 
 class BatchRNN(AbstractGraphModule, BaseModule):
 
-    def __init__(self, embedding_size=512, hidden_size=512, num_classes=1, pad_idx=0, num_layers=1,
+    def __init__(self, embedding_size=512, hidden_size=512, num_classes=1, 
+                pad_idx=0, num_layers=1, vocab_size=700,
                 loss_type='MapeLoss', loss_fn_arg={}):
         super(BatchRNN, self).__init__(embedding_size, hidden_size, num_classes)
-
+    
         self.pad_idx = pad_idx
         self.token_rnn = nn.LSTM(self.embedding_size, self.hidden_size, batch_first=True, num_layers=num_layers)
         self.instr_rnn = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True, num_layers=num_layers)
@@ -539,6 +540,7 @@ class BatchRNN(AbstractGraphModule, BaseModule):
 
         self.linear = nn.Linear(self.hidden_size, self.num_classes)
         self.loss = load_losses(loss_type, loss_fn_arg)
+        self.set_learnable_embedding(mode='none', dictsize=vocab_size)
 
     def rnn_init_hidden(self):
         # type: () -> Union[Tuple[nn.Parameter, nn.Parameter], nn.Parameter]

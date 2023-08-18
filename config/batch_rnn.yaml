@@ -4,6 +4,7 @@ model:
     embedding_size: 512
     hidden_size: 512
     num_layers: 1
+    vocab_size: 700
     
     loss_type: MapeLoss
     pad_idx: from:data.special_token_idx.PAD
