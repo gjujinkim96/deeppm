@@ -1,2 +1,2 @@
-python run_DeepPM.py --cfg config/maskedlang.yaml --exp_name maskedlang --exp_override 
+python run_DeepPM.py --cfg config/extra_tags.yaml --exp_name extra_tags --exp_override 
 #  --exp_override

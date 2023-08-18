@@ -13,9 +13,12 @@ import math
 import numpy as np
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union, Tuple
 #from . import model_utils
+from utils import get_device
+from .base_class import BaseModule
+from losses import load_losses
 
 # cuda = torch.device('cuda')
-device =  torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# device =  torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 class AbstractGraphModule(nn.Module):
 
@@ -23,6 +26,7 @@ class AbstractGraphModule(nn.Module):
         # type: (int, int, int) -> None
         super(AbstractGraphModule, self).__init__()
 
+        self.device = get_device(False)
         self.embedding_size = embedding_size
         self.num_classes = num_classes
         self.hidden_size = hidden_size
@@ -72,8 +76,8 @@ class AbstractGraphModule(nn.Module):
         # type: () -> Tuple[nn.Parameter, nn.Parameter]
 
         return (
-            nn.Parameter(torch.zeros(1, 1, self.hidden_size, requires_grad=True)).to(device),
-            nn.Parameter(torch.zeros(1, 1, self.hidden_size, requires_grad=True)).to(device),
+            nn.Parameter(torch.zeros(1, 1, self.hidden_size, requires_grad=True)).to(self.device),
+            nn.Parameter(torch.zeros(1, 1, self.hidden_size, requires_grad=True)).to(self.device),
         )
 
     def remove_refs(self, item):
@@ -368,18 +372,18 @@ class RNN(AbstractGraphModule):
         if params.rnn_type == RnnType.RNN:
             self.token_rnn = nn.RNN(self.embedding_size, self.hidden_size)
             self.instr_rnn = nn.RNN(self.hidden_size, self.hidden_size)
-            self.token_rnn.to(device)
-            self.instr_rnn.to(device)
+            self.token_rnn.to(self.device)
+            self.instr_rnn.to(self.device)
         elif params.rnn_type == RnnType.LSTM:
             self.token_rnn = nn.LSTM(self.embedding_size, self.hidden_size)
             self.instr_rnn = nn.LSTM(self.hidden_size, self.hidden_size)
-            self.token_rnn.to(device)
-            self.instr_rnn.to(device)
+            self.token_rnn.to(self.device)
+            self.instr_rnn.to(self.device)
         elif params.rnn_type == RnnType.GRU:
             self.token_rnn = nn.GRU(self.embedding_size, self.hidden_size)
             self.instr_rnn = nn.GRU(self.hidden_size, self.hidden_size)
-            self.token_rnn.to(device)
-            self.instr_rnn.to(device)
+            self.token_rnn.to(self.device)
+            self.instr_rnn.to(self.device)
         else:
             raise ValueError('Unknown RNN type {}'.format(params.rnn_type))
 
@@ -449,7 +453,7 @@ class RNN(AbstractGraphModule):
                     else:
                         token_state = token_state + parent_state
             
-            tokens = self.final_embeddings(torch.tensor(token_inputs, dtype=torch.long, device=device)).unsqueeze(1)
+            tokens = self.final_embeddings(torch.tensor(token_inputs, dtype=torch.long, device=self.device)).unsqueeze(1)
             #tokens = self.final_embeddings(torch.LongTensor(token_inputs)).unsqueeze(1)
             output, state = self.token_rnn(tokens, token_state)
 
@@ -518,22 +522,23 @@ def get_last_false_values(x, mask, dim):
     output = torch.gather(x, dim, br)
     return output.squeeze(dim)
 
-class BatchRNN(AbstractGraphModule):
+class BatchRNN(AbstractGraphModule, BaseModule):
 
-    def __init__(self, params):
-        # type: (RnnParameters) -> None
-        super(BatchRNN, self).__init__(params.embedding_size, params.hidden_size, params.num_classes)
+    def __init__(self, embedding_size=512, hidden_size=512, num_classes=1, pad_idx=0, num_layers=1,
+                loss_type='MapeLoss', loss_fn_arg={}):
+        super(BatchRNN, self).__init__(embedding_size, hidden_size, num_classes)
 
-        self.params = params
-        self.token_rnn = nn.LSTM(self.embedding_size, self.hidden_size, batch_first=True)
-        self.instr_rnn = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True)
-        self.token_rnn.to(device)
-        self.instr_rnn.to(device)
+        self.pad_idx = pad_idx
+        self.token_rnn = nn.LSTM(self.embedding_size, self.hidden_size, batch_first=True, num_layers=num_layers)
+        self.instr_rnn = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True, num_layers=num_layers)
+        self.token_rnn.to(self.device)
+        self.instr_rnn.to(self.device)
         
         self._token_init = self.rnn_init_hidden()
         self._instr_init = self.rnn_init_hidden()
 
         self.linear = nn.Linear(self.hidden_size, self.num_classes)
+        self.loss = load_losses(loss_type, loss_fn_arg)
 
     def rnn_init_hidden(self):
         # type: () -> Union[Tuple[nn.Parameter, nn.Parameter], nn.Parameter]
@@ -543,41 +548,42 @@ class BatchRNN(AbstractGraphModule):
         # for h in hidden:
         #     torch.nn.init.kaiming_uniform_(h)
 
-        if self.params.rnn_type == RnnType.LSTM:
-            return hidden
-        else:
-            return hidden[0]
+        return hidden
+        # if self.params.rnn_type == RnnType.LSTM:
+        #     return hidden
+        # else:
+        #     return hidden[0]
 
     def get_token_init(self):
         # type: () -> torch.tensor
-        if self.params.learn_init:
-            return self._token_init
-        else:
-            return self.rnn_init_hidden()
+        # if self.params.learn_init:
+        #     return self._token_init
+        # else:
+        return self.rnn_init_hidden()
 
     def get_instr_init(self):
         # type: () -> torch.tensor
-        if self.params.learn_init:
-            return self._instr_init
-        else:
-            return self.rnn_init_hidden()
+        # if self.params.learn_init:
+        #     return self._instr_init
+        # else:
+        return self.rnn_init_hidden()
 
     def pred_of_instr_chain(self, instr_chain):
         # type: (torch.tensor) -> torch.tensor
         _, final_state_packed = self.instr_rnn(instr_chain, self.get_instr_init())
-        if self.params.rnn_type == RnnType.LSTM:
-            final_state = final_state_packed[0]
-        else:
-            final_state = final_state_packed
+        final_state = final_state_packed[0]
+        # if self.params.rnn_type == RnnType.LSTM:
+        #     final_state = final_state_packed[0]
+        # else:
+        #     final_state = final_state_packed
         return self.linear(final_state.squeeze()).squeeze()
 
 
-    
     def forward(self, x):
         # mask = B I S
         # x = B I S
         
-        mask = x == self.params.pad_idx
+        mask = x == self.pad_idx
 
         batch_size, inst_size, seq_size = x.shape
 
@@ -609,94 +615,6 @@ class BatchRNN(AbstractGraphModule):
         output = self.linear(final_state).squeeze(-1)
         return output
     
-class BatchRNN2(AbstractGraphModule):
-
-    def __init__(self, params):
-        # type: (RnnParameters) -> None
-        super(BatchRNN2, self).__init__(params.embedding_size, params.hidden_size, params.num_classes)
-
-        self.params = params
-        self.token_rnn = nn.LSTM(self.embedding_size, self.hidden_size, batch_first=True, num_layers=2)
-        self.instr_rnn = nn.LSTM(self.hidden_size, self.hidden_size, batch_first=True, num_layers=2)
-        self.token_rnn.to(device)
-        self.instr_rnn.to(device)
-        
-        self._token_init = self.rnn_init_hidden()
-        self._instr_init = self.rnn_init_hidden()
-
-        self.linear = nn.Linear(self.hidden_size, self.num_classes)
-
-    def rnn_init_hidden(self):
-        # type: () -> Union[Tuple[nn.Parameter, nn.Parameter], nn.Parameter]
-
-        hidden = self.init_hidden()
-
-        # for h in hidden:
-        #     torch.nn.init.kaiming_uniform_(h)
-
-        if self.params.rnn_type == RnnType.LSTM:
-            return hidden
-        else:
-            return hidden[0]
-
-    def get_token_init(self):
-        # type: () -> torch.tensor
-        if self.params.learn_init:
-            return self._token_init
-        else:
-            return self.rnn_init_hidden()
-
-    def get_instr_init(self):
-        # type: () -> torch.tensor
-        if self.params.learn_init:
-            return self._instr_init
-        else:
-            return self.rnn_init_hidden()
-
-    def pred_of_instr_chain(self, instr_chain):
-        # type: (torch.tensor) -> torch.tensor
-        _, final_state_packed = self.instr_rnn(instr_chain, self.get_instr_init())
-        if self.params.rnn_type == RnnType.LSTM:
-            final_state = final_state_packed[0]
-        else:
-            final_state = final_state_packed
-        return self.linear(final_state.squeeze()).squeeze()
-
-
-    
-    def forward(self, x):
-        # mask = B I S
-        # x = B I S
-        
-        mask = x == self.params.pad_idx
-
-        batch_size, inst_size, seq_size = x.shape
-
-        #  tokens = B I S HID
-        tokens = self.final_embeddings(x)
-
-        #  B*I S HID
-        tokens = tokens.view(batch_size * inst_size, seq_size, -1)
-
-        # output = B*I S HID
-        output, _ = self.token_rnn(tokens)
-        
-        #  B I S HID
-        output = output.view(batch_size, inst_size, seq_size, -1)
-
-        #  B I HID
-        instr_chain = get_last_false_values(output, mask, dim=2)
-
-        #  B I HID
-        inst_output, _ = self.instr_rnn(instr_chain)
-
-        #  B I
-        mask = mask.all(dim=-1)
-
-        #  B HID
-        final_state = get_last_false_values(inst_output, mask, dim=1)
-        
-        #  B
-        output = self.linear(final_state).squeeze(-1)
-        return output
+    def get_loss(self):
+        return self.loss
     

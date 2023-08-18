@@ -39,19 +39,20 @@ class Data(object):
         for i in range(self.opcode_start, self.mem_start):
             self.costs[i] = np.random.randint(1,maxnum)
 
-    def generate_datasets(self, split_mode='none', hyperparameter_test=False, hyperparameter_test_mult=0.2, split_perc=(8, 2, 0)):
+    def generate_datasets(self, split_mode='none', hyperparameter_test=False, hyperparameter_test_mult=0.2, split_perc=(8, 2, 0), shuffle=False):
         def get_train_val(size, train, val):
             total_perc = train + val
             train_size = int(size * (train / total_perc))
             val_size = size - train_size
             return train_size, val_size
         
-        tmp = self.data
+        tmp = list(self.data)
+        if shuffle:
+            random.shuffle(tmp)
 
         self.test = []
 
         if split_perc[2] > 0:
-            random.shuffle(tmp)
             _, test_size = get_train_val(len(self.data), split_perc[0]+split_perc[1], split_perc[2])
             self.test.extend(tmp[:test_size])
             tmp = tmp[test_size:]

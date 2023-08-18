@@ -11,16 +11,16 @@ def load_data_from_cfg(args, cfg):
     data = dt.load_data(
         cfg.data.data_file, 
         small_size=args.small_size,
-        stacked=data_setting.stacked, 
         only_unique=data_setting.only_unique,
         split_mode=data_setting.split_mode,
         split_perc=(data_setting.train_perc, data_setting.val_perc, data_setting.test_perc),
         hyperparameter_test=cfg.train.hyperparameter_testing.using,
         hyperparameter_test_mult=cfg.train.hyperparameter_testing.mult,
         special_tokens=special_tokens,
-        simplify=getattr(data_setting, 'simplify', False),
+        prepare_mode=getattr(data_setting, 'prepare_mode', 'stacked'),
         src_info_file=getattr(cfg.data, 'src_info_file', None),
-        bert=data_setting.bert
+        bert=data_setting.bert,
+        shuffle=getattr(data_setting, 'shuffle', False),
     )
 
     return data

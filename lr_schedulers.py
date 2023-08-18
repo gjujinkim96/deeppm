@@ -22,10 +22,10 @@ from utils import recursive_vars
 #     return 1/1.2**(epoch-2)
 
 # # epoch starts from 0
-# def decay_after_2_delay(epoch):
-#     if epoch <= 1:
-#         return 1
-#     return 1/1.2**(epoch-1)
+def decay_after_2_delay(epoch):
+    if epoch <= 1:
+        return 1
+    return 1/1.2**(epoch-1)
 
 
 def warmup_with_decay(warmup_step, total_step):
@@ -43,6 +43,17 @@ def get_warmp_with_decay_lr_sched(opt, total_step, warmup_step=None, warmup_rati
     return lr_sched.LambdaLR(opt, warmup_with_decay(warmup_step=warmup_step, total_step=total_step))
 
 
+def decay_after_delay(delay=2, div_factor=1.2):
+    def lr_sched(step):
+        if step < delay:
+            return 1
+        return 1/1.2**(step-delay+1)
+    return lr_sched
+
+def get_decay_after_delay_lr_sched(opt, delay=2, div_factor=1.2):
+    return lr_sched.LambdaLR(opt, decay_after_delay(delay=delay, div_factor=div_factor))
+
+# class dict build process
 class_dict = {}
 module = importlib.import_module('torch.optim.lr_scheduler', package='torch')
 for name, cls in inspect.getmembers(module, inspect.isclass):
@@ -57,6 +68,7 @@ for name, cls in inspect.getmembers(module, inspect.isfunction):
     if cls.__module__ == module.__name__:
         class_dict[name] = cls 
 
+#  loading part
 def load_lr_scheduler_from_cfg(optimizer, cfg):
     return load_lr_scheduler(optimizer, cfg.train.lr_scheduler, recursive_vars(cfg.train.lr_scheduler_setting))
 

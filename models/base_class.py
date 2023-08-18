@@ -14,7 +14,7 @@ class BaseModule(nn.Module):
             loss *= loss_mod
         loss.backward()
 
-        return loss.item(), y.tolist(), output.tolist()
+        return {'loss': loss.item()}, y.tolist(), output.tolist()
 
     def run_val(self, x, y, loss_mod=None):
         output = self.forward(x)
@@ -24,7 +24,7 @@ class BaseModule(nn.Module):
         if loss_mod is not None:
             loss *= loss_mod
 
-        return loss.item(), y.tolist(), output.tolist()
+        return {'loss': loss.item()}, y.tolist(), output.tolist()
     
     def run(self, x, y, loss_mod=None, is_train=False):
         if is_train:
@@ -58,7 +58,7 @@ class CheckpointModule(nn.Module):
             loss *= loss_mod
         loss.backward()
 
-        return loss.item(), y.tolist(), output.tolist()
+        return {'loss': loss.item()}, y.tolist(), output.tolist()
 
     def run_val(self, x, y, loss_mod=None):
         if self.use_checkpoint:
@@ -72,7 +72,7 @@ class CheckpointModule(nn.Module):
         if loss_mod is not None:
             loss *= loss_mod
 
-        return loss.item(), y.tolist(), output.tolist()
+        return {'loss': loss.item()}, y.tolist(), output.tolist()
     
     def run(self, x, y, loss_mod=None, is_train=False):
         if is_train:
