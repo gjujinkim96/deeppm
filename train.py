@@ -145,6 +145,10 @@ class LossReporter(object):
         file_name = os.path.join(self.root_path, 'trained.mdl')
         self.check_point(model,optimizer, lr_scheduler, file_name)
 
+    def save_best(self, model, optimizer, lr_scheduler):
+        file_name = os.path.join(self.root_path, 'best.mdl')
+        self.check_point(model,optimizer, lr_scheduler, file_name)
+
 
     def finish(self, model, optimizer, lr_scheduler):
 
@@ -217,20 +221,22 @@ Loss: {self.loss}
 '''
 
     def run_batch(self, batch, is_train=False):
-        short_x, short_y, long_x, long_y, short_inst_len, long_inst_len = \
-            itemgetter('short_x', 'short_y', 'long_x', 'long_y', 'short_inst_len', 'long_inst_len')(batch)
+        short, long = itemgetter('short', 'long')(batch)
 
         result = self.BatchResult()
-        short_len = len(short_y)
-        long_len = len(long_y)
+        short_len = len(short['y'])
+        long_len = len(long)
         result.batch_len = short_len + long_len
-        result.inst_lens = short_inst_len + long_inst_len
+        result.inst_lens = short['inst_len'] + [item['inst_len'][0] for item in long]
         
         if short_len > 0:
             loss_mod = short_len / result.batch_len if long_len > 0 else None
-            short_x = short_x.to(self.device)
-            short_y = short_y.to(self.device)
-            loss, new_y, new_pred = self.model.run(short_x, short_y, loss_mod, is_train)
+
+            short['x'] = short['x'].to(self.device)
+            short['y'] = short['y'].to(self.device)
+
+            loss, new_y, new_pred = self.model.run(short, loss_mod, is_train)
+            # loss, new_y, new_pred = self.model.run(short_x, short_y, loss_mod, is_train)
             result.measured.extend(new_y)
             result.prediction.extend(new_pred)
 
@@ -242,10 +248,11 @@ Loss: {self.loss}
                 result.loss[k] += loss[k]
         
         if long_len > 0:
-            for x, y in zip(long_x, long_y):
-                input_x = x.unsqueeze(0).to(self.device)
-                input_y = torch.tensor(y).unsqueeze(0).to(self.device)
-                loss, new_y, new_pred = self.model.run(input_x, input_y, 1/result.batch_len, is_train)
+            for long_item in long:
+                long_item['x'] = long_item['x'].to(self.device)
+                long_item['y'] = long_item['y'].to(self.device)
+
+                loss, new_y, new_pred = self.model.run(long_item, 1/result.batch_len, is_train)
                 result.measured.extend(new_y)
                 result.prediction.extend(new_pred)
                 mape_score = mape_batch(new_pred, new_y)
@@ -294,8 +301,11 @@ Loss: {self.loss}
         else:
             wandb_log.wandb_log_val(epoch_result, epoch)
 
+        return epoch_result.mape
+
     def train(self):
         """ Train Loop """
+        best_mape = float('inf')
         generator = get_worker_generator(self.seed)
         resultfile = os.path.join(self.expt.experiment_root_path(), 'validation_results.txt')
 
@@ -308,6 +318,9 @@ Loss: {self.loss}
 
         # with autograd.detect_anomaly(True):
         for epoch_no in range(self.cfg.train.n_epochs):
+            if getattr(self.train_ds, 'update', None) is not None:
+                self.train_ds.update(epoch_no)
+
             epoch_loss_sum = 0.
             step = 0
             total_correct = 0
@@ -344,7 +357,11 @@ Loss: {self.loss}
             epoch_loss_avg = epoch_loss_sum / step
             self.loss_reporter.end_epoch(self.model,self.optimizer, self.lr_scheduler, epoch_loss_avg)
 
-            self.validate(resultfile, epoch_no + 1)
+            cur_mape = self.validate(resultfile, epoch_no + 1)
+            if cur_mape < best_mape:
+                best_mape = cur_mape
+                self.loss_reporter.save_best(self.model, self.optimizer, self.lr_scheduler)
+
             if not self.cfg.train.use_batch_step_lr:
                 self.lr_scheduler.step()
 

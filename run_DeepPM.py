@@ -28,7 +28,7 @@ def main():
         print(f'{expt.experiment_root_path()} exist.')
         return 
 
-    data = load_data_from_cfg(args, cfg)
+    data = load_data_from_cfg(args.small_size, cfg)
 
     special_tokens = ['PAD', 'SRCS', 'DSTS', 'UNK', 'END', 'MEM', "MEM_FIN", "START", "OP", "INS_START", "INS_END"]
     if getattr(cfg.data, 'special_token_idx', None) is None:

@@ -3,10 +3,10 @@ import torch.nn as nn
 from utils import get_device
 from losses import load_losses
 
-from .base_class import BaseModule
+from .base_class import UnRollingModule
 from .pos_encoder import get_positional_encoding_1d
 
-class StackedDeepPMPadZero(BaseModule):
+class LinSum(UnRollingModule):
     """DeepPM model with Trasformer """
     def __init__(self, 
                 dim=512, n_heads=8, dim_ff=2048, 
@@ -48,8 +48,9 @@ class StackedDeepPMPadZero(BaseModule):
         )
 
         self.loss = load_losses(loss_type, loss_fn_arg)
+        self.unrolled_loss = load_losses('MSELoss', {})
        
-    def forward(self, x):
+    def forward(self, x, unrolled):
         # Basic setup
         batch_size, inst_size, seq_size = x.shape
         mask = x == self.pad_idx
@@ -89,11 +90,13 @@ class StackedDeepPMPadZero(BaseModule):
             output = self.op_layer(output, src_key_padding_mask=op_seq_mask)
 
 
-        output = output.masked_fill(op_seq_mask.unsqueeze(-1), 0)
-        output = output.sum(dim = 1)
-        out = self.prediction(output).squeeze(1)
+        output = self.prediction(output).squeeze(2)
+        output = output.masked_fill(op_seq_mask, 0)
+        out = output.sum(dim = 1)
 
-        return out
+        return out, output
+        # instr_cnt = torch.sum(op_seq_mask.logical_not(), dim=1).detach()
+        # return out, instr_cnt, output
     
     def forward_each(self, x):
         # Basic setup
@@ -136,11 +139,12 @@ class StackedDeepPMPadZero(BaseModule):
 
 
         output = output.masked_fill(op_seq_mask.unsqueeze(-1), 0)
-        output = self.prediction(output).squeeze(1)
+        output = self.prediction(output).squeeze(2)
         out = output.sum(dim = 1)
 
         return out, output
     
     def get_loss(self):
-        return self.loss
+        return self.loss, self.unrolled_loss
+    
     

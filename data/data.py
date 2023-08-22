@@ -39,7 +39,16 @@ class Data(object):
         for i in range(self.opcode_start, self.mem_start):
             self.costs[i] = np.random.randint(1,maxnum)
 
-    def generate_datasets(self, split_mode='none', hyperparameter_test=False, hyperparameter_test_mult=0.2, split_perc=(8, 2, 0), shuffle=False):
+    def generate_datasets(self, split_mode='none', hyperparameter_test=False, hyperparameter_test_mult=0.2, 
+                        split_perc=(8, 2, 0), shuffle=False, given_train_val_test_idx=None):
+        
+        if given_train_val_test_idx is not None:
+            datum_mapping = {datum.code_id: datum for datum in self.data}
+            self.train = [datum_mapping[idx] for idx in given_train_val_test_idx['train']]
+            self.val = [datum_mapping[idx] for idx in given_train_val_test_idx['val']]
+            self.test = [datum_mapping[idx] for idx in given_train_val_test_idx['test']]
+            return 
+        
         def get_train_val(size, train, val):
             total_perc = train + val
             train_size = int(size * (train / total_perc))

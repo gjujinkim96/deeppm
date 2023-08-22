@@ -107,13 +107,11 @@ class PadZeroCheckpoint(CheckpointModule):
 
         if self.num_basic_block_layer > 0:
             for idx in range((self.num_basic_block_layer + self.checkpoint_cnt - 1)//self.checkpoint_cnt):
-                output = checkpoint(method_dummy_wrapper2(self._basic_block_layer), output, idx, self.dummy)
+                output = checkpoint(method_dummy_wrapper2(self._instruction_layer), output, idx, self.dummy)
 
-        
-        
         if self.num_instruction_layer > 0:
             for idx in range((self.num_instruction_layer + self.checkpoint_cnt - 1)//self.checkpoint_cnt):
-                output = checkpoint(method_dummy_wrapper2(self._instruction_layer), output, idx, self.dummy)
+                output = checkpoint(method_dummy_wrapper2(self._basic_block_layer), output, idx, self.dummy)
 
         output, (batch_size, inst_size, seq_size), mask, op_seq_mask = output
         output = output.view(batch_size, inst_size, seq_size, -1)
@@ -178,9 +176,10 @@ class PadZeroCheckpoint(CheckpointModule):
 
     def _pred(self, x):
         output, (batch_size, inst_size, seq_size), mask, op_seq_mask = x
-        output = output.masked_fill(op_seq_mask.unsqueeze(-1), 0)
-        output = output.sum(dim = 1)
-        out = self.prediction(output).squeeze(1)
+
+        output = self.prediction(output).squeeze(2)
+        output = output.masked_fill(op_seq_mask, 0)
+        out = output.sum(dim = 1)
         return out
      
     def forward(self, x):

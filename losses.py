@@ -15,6 +15,15 @@ class MapeLoss(torch.nn.Module):
         loss = self.loss_fn(output, target) / (target + 1e-5)
         return torch.mean(loss)
        
+class RootMapeLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.loss_fn = nn.L1Loss(reduction='none')
+
+    def forward(self, output, target):
+        loss = self.loss_fn(output, target) / torch.sqrt(target + 1e-5)
+        return torch.mean(loss)
 
 # https://datascience.stackexchange.com/questions/96271/logcoshloss-on-pytorch
 def log_cosh_loss(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:

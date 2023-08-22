@@ -10,14 +10,24 @@ from collections import defaultdict
 import torch
 
 class BertInstructionEmbedding(Data):
-    def __init__(self, special_tokens=None):
+    def __init__(self, special_tokens=None, given_token_mapping=None):
         super(BertInstructionEmbedding, self).__init__()
-        self.token_to_hot_idx = {}
-        self.hot_idx_to_token = {}
+        if given_token_mapping is not None:
+            self.token_to_hot_idx = given_token_mapping
+            self.hot_idx_to_token = {
+                v: k for k, v in self.token_to_hot_idx.items()
+            }
+                
+            self.next_hot_idx = max(self.token_to_hot_idx.values()) + 1
+        else:
+            self.token_to_hot_idx = {}
+            self.hot_idx_to_token = {}
+            self.next_hot_idx = 0
+
         self.data = []
         self.raw = []
         self.unk_tok = '<UNK>'
-        self.next_hot_idx = 0
+        
 
         if special_tokens is not None:
             self.next_hot_idx = max(special_tokens.values()) + 1

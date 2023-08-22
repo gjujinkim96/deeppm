@@ -24,14 +24,21 @@ from .data_item import DataItem, DataItemWithSim
 
 
 class DataInstructionEmbedding(Data):
-    def __init__(self, special_tokens=None):
+    def __init__(self, special_tokens=None, given_token_mapping=None):
         super(DataInstructionEmbedding, self).__init__()
-        self.token_to_hot_idx = {}
-        self.hot_idx_to_token = {}
+        if given_token_mapping is not None:
+            self.token_to_hot_idx = given_token_mapping
+            self.hot_idx_to_token = {
+                v: k for k, v in self.token_to_hot_idx.items()
+            }
+            self.next_hot_idx = max(self.token_to_hot_idx.values()) + 1
+        else:
+            self.token_to_hot_idx = {}
+            self.hot_idx_to_token = {}
+            self.next_hot_idx = 0
         self.data = []
         self.raw = []
         self.unk_tok = '<UNK>'
-        self.next_hot_idx = 0
 
         if special_tokens is not None:
             self.next_hot_idx = max(special_tokens.values()) + 1
@@ -214,7 +221,7 @@ class DataInstructionEmbedding(Data):
 
             self.raw.append(readable_instrs)
 
-    def prepare_extra_tag_data(self, progress=True, src_df=None):
+    def prepare_extra_tag_data(self, progress=True, src_df=None, only_one=False):
         
         self.pad_idx = self.hot_idxify('<PAD>')
         base_idx = self.hot_idxify('<BASE>')
@@ -234,10 +241,18 @@ class DataInstructionEmbedding(Data):
             readable_instrs = []
             curr_mem = self.mem_start
             
+            is_okay = True
             split_code_intel = itertools.chain((code_intel or '').split('\n'), itertools.repeat(''))
+
+            if only_one and '\n' in code_intel:
+                continue
+            
             for (instr, m_code_intel) in zip(block_root, split_code_intel):
                 raw_instr = []
+                raw_instr.append('<START>')
+                raw_instr.append('<OP>')
                 opcode = int(instr.find('opcode').text)
+
                 raw_instr.extend([opcode, '<SRCS>'])
                 
                 srcs = []
@@ -260,14 +275,17 @@ class DataInstructionEmbedding(Data):
                                     raise ValueError('missing reg, or scale under <index>')
                                 raw_instr.append('<INDEX>')
                                 raw_instr.append(int(index_reg.text))
+                                raw_instr.append('<SCALE>')
                                 raw_instr.append(int(index_scale.text))
                                 srcs.append(int(index_reg.text))
                             
                             disp = mem.find('disp')
                             if disp is not None:
+                                raw_instr.append('<DISP>')
                                 raw_instr.append(int(disp.text))
                                 srcs.append(int(disp.text))
 
+                            raw_instr.append('</MEM>')
                             srcs.append(curr_mem)
                             curr_mem += 1
                         else:
@@ -295,14 +313,17 @@ class DataInstructionEmbedding(Data):
                                     raise ValueError('missing reg, or scale under <index>')
                                 raw_instr.append('<INDEX>')
                                 raw_instr.append(int(index_reg.text))
+                                raw_instr.append('<SCALE>')
                                 raw_instr.append(int(index_scale.text))
                                 srcs.append(int(index_reg.text))
                             
                             disp = mem.find('disp')
                             if disp is not None:
+                                raw_instr.append('<DISP>')
                                 raw_instr.append(int(disp.text))
                                 srcs.append(int(disp.text))
 
+                            raw_instr.append('</MEM>')
                             dsts.append(curr_mem)
                             curr_mem += 1
                         else:
@@ -317,6 +338,12 @@ class DataInstructionEmbedding(Data):
                 instrs[-1].intel = m_code_intel
 
             if len(raw_instrs) > 400:
+                continue
+
+            if only_one and len(raw_instrs) > 1:
+                continue
+
+            if not is_okay:
                 continue
 
             block = ut.BasicBlock(instrs)
@@ -416,7 +443,6 @@ def extract_unique(data, raw):
     grouped = defaultdict(list)
     for idx, datum in enumerate(tqdm(data, total=len(data))):
         grouped[str(datum.block.instrs)].append(idx)
-        
     cleaned = []
     cleaned_raw = []
     for k, v in tqdm(grouped.items(), total=len(grouped)):
@@ -434,16 +460,18 @@ def load_data(data_savefile, small_size=False, only_unique=False,
             split_mode='none', split_perc=(8, 2, 0),
             hyperparameter_test=False, hyperparameter_test_mult=0.2,
             special_tokens=None, src_info_file=None, bert=False, 
-            prepare_mode='stacked', shuffle=False
+            prepare_mode='stacked', shuffle=False, given_token_mapping=None,
+            only_one=False, given_train_val_test_idx=None,
     ):
     '''
     split_mode: num_instrs+srcs, num_instrs, none
     prepare_mode: simplify, stacked, stacked_extra_tags, single_line
     '''
     if bert:
-        data = BertInstructionEmbedding(special_tokens=special_tokens)
+        data = BertInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=given_token_mapping)
     else:
-        data = DataInstructionEmbedding(special_tokens=special_tokens)
+        data = DataInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=given_token_mapping)
+
 
     if small_size:
         data.raw_data = torch.load(data_savefile)[:100]
@@ -462,7 +490,7 @@ def load_data(data_savefile, small_size=False, only_unique=False,
     elif prepare_mode == 'stacked':
         data.prepare_stacked_data(src_df=src_df)
     elif prepare_mode == 'stacked_extra_tags':
-        data.prepare_extra_tag_data(src_df=src_df)
+        data.prepare_extra_tag_data(src_df=src_df, only_one=only_one)
     elif prepare_mode == 'single_line':
         raise NotImplementedError()
         data.prepare_data()
@@ -475,7 +503,7 @@ def load_data(data_savefile, small_size=False, only_unique=False,
     # change test pert or some way to split train, val test in constructor? no in generate dataset!!
     #  remove self.perct in base class
     data.generate_datasets(split_mode=split_mode, split_perc=split_perc, hyperparameter_test=hyperparameter_test, 
-                        hyperparameter_test_mult=hyperparameter_test_mult, shuffle=shuffle
+                        hyperparameter_test_mult=hyperparameter_test_mult, shuffle=shuffle, given_train_val_test_idx=given_train_val_test_idx
                         )
 
     return data

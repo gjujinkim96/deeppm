@@ -2,21 +2,22 @@ model:
   model_class: PadZeroCheckpoint
   model_setting:
     use_checkpoint: true
-    dim: 512
-    n_heads: 8
-    dim_ff: 2048
-    pred_drop: 0.0
+    dim: 768
+    n_heads: 12
+    dim_ff: 3072
+    pred_drop: 0.1
     vocab_size: 700
     loss_type: MapeLoss
-    num_basic_block_layer: 4
-    num_instruction_layer: 4
-    num_op_layer: 8
+    num_basic_block_layer: 2
+    num_instruction_layer: 2
+    num_op_layer: 4
+    checkpoint_cnt: 1
     pad_idx: from:data.special_token_idx.PAD
 
 train:
   seed: 3431
-  batch_size: 16
-  val_batch_size: 16
+  batch_size: 8
+  val_batch_size: 8
   n_epochs: 30
   warmup: 0.001
   clip_grad_norm: 0.2
@@ -32,21 +33,28 @@ train:
     mult: 0.2
 
 data:
-  data_file: training_data/intel_core.data
+  data_file: training_data/spec_core_0714.data
+  # src_info_file: training_data/skl_mapping.csv
   data_setting:
+    bert: false
     only_unique: true
-    short_only: false
-    stacked: true
+    split_mode: none
+    train_perc: 8
+    val_perc: 2
+    test_perc: 0
+    prepare_mode: stacked_extra_tags
+    shuffle: false
+    only_one: false
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512
   # raw_data: false
   #  sample usage of predifined special token idxs
-  # special_token_idx:
-  #   PAD: 3
-  #   SRCS: 1
-  #   DSTS: 2
-  #   MEM: 3 # <MEM>
-  #   MEM_FIN: 4  # </MEM>
-  #   END: 5
-  #   UNK: 6 
+  special_token_idx:
+    PAD: 0
+    SRCS: 1
+    DSTS: 2
+    MEM: 3 # <MEM>
+    MEM_FIN: 4  # </MEM>
+    END: 5
+    UNK: 6 

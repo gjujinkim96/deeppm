@@ -46,6 +46,7 @@ def cat_by_inst(value):
     return cat_names[idx]
 
 best_val_loss = float('inf')
+best_mape_loss = float('inf')
 best_25_accuracy = float('-inf')
 
 def wandb_log_val(er, epoch):
@@ -68,6 +69,7 @@ def wandb_log_val(er, epoch):
             logging_dict[f'{k}/Validation'] = er.loss[k]
 
 
+    # scatter_data = [[x, y] for (x, y) in zip(df.predicted, df.measured)]
     scatter_data = [[x, y] for (x, y) in zip(df.predicted, df.measured)]
     scatter_table = wandb.Table(data=scatter_data, columns = ["Predicted", "Measured"])
     logging_dict["val/summary/scatter"] = wandb.plot.scatter(scatter_table, "Predicted", "Measured", title="Measured vs. Predicted")
@@ -100,7 +102,12 @@ def wandb_log_val(er, epoch):
     wandb.log(logging_dict)
 
     global best_val_loss
+    global best_mape_loss
     global best_25_accuracy
+
+    if er.mape < best_mape_loss:
+        best_mape_loss = er.mape
+        wandb.run.summary['best_mape'] = best_mape_loss
 
     if er.loss['loss'] < best_val_loss:
         best_val_loss = er.loss['loss']

@@ -14,8 +14,8 @@ model:
 
 train:
   seed: 3431
-  batch_size: 16
-  val_batch_size: 16
+  batch_size: 32
+  val_batch_size: 32
   n_epochs: 30
   clip_grad_norm: 0.2
   optimizer: Adam
@@ -36,11 +36,12 @@ data:
     bert: false
     only_unique: true
     split_mode: none
-    train_perc: 7
+    train_perc: 8
     val_perc: 2
-    test_perc: 1
+    test_perc: 0
     prepare_mode: stacked_extra_tags
-    shuffle: False
+    shuffle: true
+    only_one: true
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512
