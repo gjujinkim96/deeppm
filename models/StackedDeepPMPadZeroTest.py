@@ -31,7 +31,10 @@ class StackedDeepPMPadZeroTest(CheckpointModule):
         if self.num_basic_block_layer > 0:
             block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
                                                 batch_first=True)
-            self.basic_block_layer = nn.TransformerEncoder(block, num_basic_block_layer, enable_nested_tensor=False)
+            self.basic_block_layer1 = nn.TransformerEncoder(block, 1, enable_nested_tensor=False)
+            block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
+                                                batch_first=True)
+            self.basic_block_layer2 = nn.TransformerEncoder(block, 1, enable_nested_tensor=False)
 
         if self.num_instruction_layer > 0:
             block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
@@ -75,6 +78,21 @@ class StackedDeepPMPadZeroTest(CheckpointModule):
         output = self.pos2d_embed(output)
         return output, mask, op_seq_mask, (batch_size, inst_size, seq_size)
 
+    def _basic_block_layer1(self, raws):
+        output, mask, op_seq_mask, (batch_size, inst_size, seq_size) = raws
+        output = output.view(batch_size, inst_size * seq_size, -1)
+        mask = mask.view(batch_size, inst_size * seq_size)
+        output = self.basic_block_layer1(output, src_key_padding_mask=mask)
+        return output, mask, op_seq_mask, (batch_size, inst_size, seq_size)
+    
+    def _basic_block_layer2(self, raws):
+        output, mask, op_seq_mask, (batch_size, inst_size, seq_size) = raws
+        output = self.basic_block_layer2(output, src_key_padding_mask=mask)
+        output = output.masked_fill(mask.unsqueeze(-1), 0)
+        output = output.view(batch_size, inst_size, seq_size, -1)
+        bb_output = output.sum(dim=2)
+        return output, bb_output, mask, op_seq_mask, (batch_size, inst_size, seq_size)
+    
     def _basic_block_layer(self, raws):
         output, mask, op_seq_mask, (batch_size, inst_size, seq_size) = raws
         output = output.view(batch_size, inst_size * seq_size, -1)
@@ -123,12 +141,8 @@ class StackedDeepPMPadZeroTest(CheckpointModule):
         output = output.sum(dim=1)
         return output
     
-    def _half_part(self, x):
-        raw_outputs = self._setup_layer(x)
-        
-        # Basic block layer
-        raw_outputs = self._basic_block_layer(raw_outputs)
-
+    def _half_part(self, raw_outputs):
+        raw_outputs = self._basic_block_layer2(raw_outputs)
         output, bb_output, mask, op_seq_mask, (batch_size, inst_size, seq_size) = raw_outputs
         raw_outputs = output, mask, op_seq_mask, (batch_size, inst_size, seq_size)
         
@@ -138,11 +152,15 @@ class StackedDeepPMPadZeroTest(CheckpointModule):
         return bb_output, il_output, output, mask, op_seq_mask, (batch_size, inst_size, seq_size)
     
     def checkpoint_forward(self, x):
-        raw_outputs = checkpoint(method_dummy_wrapper(self._half_part), x, self.dummy)
+        raw_outputs = checkpoint(method_dummy_wrapper(self._setup_layer), x, self.dummy)
+        raw_outputs = checkpoint(method_dummy_wrapper(self._basic_block_layer1), raw_outputs, self.dummy)
+        raw_outputs = checkpoint(method_dummy_wrapper(self._half_part), raw_outputs, self.dummy)
         return self._predict_layer(raw_outputs)
     
     def forward(self, x):
-        raw_outputs = self._half_part(x)
+        raw_outputs = self._setup_layer(x)
+        raw_outputs = self._basic_block_layer1(raw_outputs)
+        raw_outputs = self._half_part(raw_outputs)
         return self._predict_layer(raw_outputs)
 
     def get_loss(self):
