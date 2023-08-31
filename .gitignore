@@ -221,3 +221,5 @@ result_pickle
 wandb
 graph
 model_result
+results
+student_bert

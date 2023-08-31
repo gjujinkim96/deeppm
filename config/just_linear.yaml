@@ -1,28 +1,22 @@
 model:
-  model_class: PadZeroCheckpoint
+  model_class: JustLinear
   model_setting:
     dim: 768
-    n_heads: 12
-    dim_ff: 3072
-    pred_drop: 0.0
+    pred_drop: 0.1
     vocab_size: -1
-    loss_type: MapeLoss 
-    num_basic_block_layer: 2
-    num_instruction_layer: 2
-    num_op_layer: 3
+    loss_type: MapeLoss
     pad_idx: from:data.special_token_idx.PAD
-    use_checkpoint: false
-    checkpoint_cnt: 1
 train:
+  is_bert: false
   seed: 3431
-  batch_size: 16
-  val_batch_size: 16
+  batch_size: 32
+  val_batch_size: 32
   n_epochs: 30
   clip_grad_norm: 0.2
   optimizer: Adam
   optimizer_setting:
     lr: 0.00001
-    # weight_decay: 0.0001
+    # weight_decay: 0.01
   lr_scheduler: LinearLR
   use_batch_step_lr: false
   lr_scheduler_setting:
@@ -30,23 +24,20 @@ train:
   hyperparameter_testing:
     using: False
     mult: 0.2
-
-
-
 data:
   data_file: training_data/spec_core_0714.data
   # src_info_file: training_data/skl_mapping.csv
   data_setting:
     bert: false
     only_unique: true
-    # split_mode: none
-    split_mode: short_in_train:99
+    split_mode: short_in_train:199
     train_perc: 8
     val_perc: 2
     test_perc: 0
     prepare_mode: stacked_extra_tags
     shuffle: false
-    instr_limit: 400
+    # instr_limit: 400
+    instr_limit: 2
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512

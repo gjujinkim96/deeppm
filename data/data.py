@@ -72,6 +72,16 @@ class Data(object):
             train_size, val_size = get_train_val(len(tmp), split_perc[0], split_perc[1])
             self.train.extend(tmp[:train_size])
             self.val.extend(tmp[train_size:])
+        elif split_mode.startswith('short_in_train:'):
+            limit = int(split_mode.split(':')[1])
+            train_size, val_size = get_train_val(len(tmp), split_perc[0], split_perc[1])
+            for datum in tmp[:train_size]:
+                if datum.block.num_instrs() <= limit:
+                    self.train.append(datum)
+                else:
+                    self.val.append(datum)
+            
+            self.val.extend(tmp[train_size:])
         elif split_mode == 'num_instrs':
             self.train = []
             self.val = []

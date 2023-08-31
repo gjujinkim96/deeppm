@@ -1,22 +1,20 @@
 model:
-  model_class: PadZeroCheckpoint
+  model_class: BaselineTest5
   model_setting:
-    dim: 768
-    n_heads: 12
-    dim_ff: 3072
+    dim: 512
+    n_heads: 8
+    dim_ff: 2048
     pred_drop: 0.0
-    vocab_size: -1
-    loss_type: MapeLoss 
-    num_basic_block_layer: 2
-    num_instruction_layer: 2
-    num_op_layer: 3
+    vocab_size: 700
+    loss_type: MapeLoss
+    num_basic_block_layer: 0
+    num_instruction_layer: 1
+    num_op_layer: 0
     pad_idx: from:data.special_token_idx.PAD
-    use_checkpoint: false
-    checkpoint_cnt: 1
 train:
   seed: 3431
-  batch_size: 16
-  val_batch_size: 16
+  batch_size: 32
+  val_batch_size: 32
   n_epochs: 30
   clip_grad_norm: 0.2
   optimizer: Adam
@@ -39,14 +37,13 @@ data:
   data_setting:
     bert: false
     only_unique: true
-    # split_mode: none
-    split_mode: short_in_train:99
+    split_mode: none
     train_perc: 8
     val_perc: 2
     test_perc: 0
     prepare_mode: stacked_extra_tags
     shuffle: false
-    instr_limit: 400
+    instr_limit: 2
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512

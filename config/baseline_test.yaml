@@ -16,8 +16,8 @@ model:
     # srcs_idx: from:data.special_token_idx.SRCS
     # mem_idx: from:data.special_token_idx.MEM
     # mem_end_idx: from:data.special_token_idx./MEM
-    loss_type: RootMapeLoss
-    use_checkpoint: true
+    # loss_type: RootMapeLoss
+    use_checkpoint: false
 train:
   seed: 3431
   batch_size: 16
@@ -49,8 +49,8 @@ data:
     val_perc: 2
     test_perc: 0
     prepare_mode: stacked_extra_tags
-    shuffle: false
-    only_one: false
+    shuffle: true
+    instr_limit: 3
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512

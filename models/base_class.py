@@ -1,15 +1,19 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
+from utils import get_device
 
 class BaseModule(nn.Module):
     def __init__(self):
         super().__init__()
+        self.device = get_device(should_print=False)
 
     def run_train(self, input, loss_mod=None):
-        x = input['x']
-        y = input['y']
+        x = input['x'].to(self.device)
         output = self.forward(x)
         loss_fn = self.get_loss()
+
+        y = input['y'].to(self.device)
         loss = loss_fn(output, y)
 
         if loss_mod is not None:
@@ -19,10 +23,11 @@ class BaseModule(nn.Module):
         return {'loss': loss.item()}, y.tolist(), output.tolist()
 
     def run_val(self, input, loss_mod=None):
-        x = input['x']
-        y = input['y']
+        x = input['x'].to(self.device)
         output = self.forward(x)
         loss_fn = self.get_loss()
+
+        y = input['y'].to(self.device)
         loss = loss_fn(output, y)
         
         if loss_mod is not None:
@@ -37,7 +42,7 @@ class BaseModule(nn.Module):
             return self.run_val(input, loss_mod=loss_mod)
 
     def get_loss(self):
-        raise NotImplementedError()
+        return self.loss
 
 
 class CheckpointModule(nn.Module):
@@ -45,13 +50,13 @@ class CheckpointModule(nn.Module):
         super().__init__()
 
         self.use_checkpoint = use_checkpoint
+        self.device = get_device(should_print=False)
 
     def checkpoint_forward(self, x):
         raise NotImplementedError()
     
     def run_train(self, input, loss_mod=None):
-        x = input['x']
-        y = input['y']
+        x = input['x'].to(self.device)
 
         if self.use_checkpoint:
             output = self.checkpoint_forward(x)
@@ -59,6 +64,7 @@ class CheckpointModule(nn.Module):
             output = self.forward(x)
 
         loss_fn = self.get_loss()
+        y = input['y'].to(self.device)
         loss = loss_fn(output, y)
 
         if loss_mod is not None:
@@ -68,14 +74,14 @@ class CheckpointModule(nn.Module):
         return {'loss': loss.item()}, y.tolist(), output.tolist()
 
     def run_val(self, input, loss_mod=None):
-        x = input['x']
-        y = input['y']
+        x = input['x'].to(self.device)
         if self.use_checkpoint:
             output = self.checkpoint_forward(x)
         else:
             output = self.forward(x)
             
         loss_fn = self.get_loss()
+        y = input['y'].to(self.device)
         loss = loss_fn(output, y)
         
         if loss_mod is not None:
@@ -92,50 +98,54 @@ class CheckpointModule(nn.Module):
     def get_loss(self):
         raise NotImplementedError()
     
-
 class BertModule(nn.Module):
     def __init__(self):
         super().__init__()
+        self.device = get_device(should_print=False)
 
     def run_train(self, input, loss_mod=None):
-        x = input['x']
-        y = input['y']
+        x = input['x'].to(self.device)
+        masked_x = input['masked_x'].to(self.device)
 
-        output, bert_output = self.forward(x)
-        loss_fn, bert_loss_fn = self.get_loss()
-        loss = loss_fn(output, y)
+        prediction = self.forward(masked_x)
 
         batch_size, inst_size, seq_size = x.shape
-        bert_target = x.view(-1)
-        bert_output = bert_output.view(batch_size * inst_size * seq_size, -1)
-        bert_loss = bert_loss_fn(bert_output, bert_target)
+        x = x.view(batch_size * inst_size *seq_size)
+        prediction = prediction.view(batch_size * inst_size *seq_size, -1)
+        loss_fn = self.get_loss()
+        loss = loss_fn(prediction, x)
 
         if loss_mod is not None:
             loss *= loss_mod
-            bert_loss *= loss_mod
-        bert_loss.backward(retain_graph=True)
         loss.backward()
 
-        return {'loss': loss.item(), 'bert_loss': bert_loss.item()}, y.tolist(), output.tolist()
+        prediction = prediction.detach()
+        correct = (x == torch.max(prediction, dim=-1)[1]).sum().item()
+
+        total = (x != 0).sum().item()
+
+        return {'loss': loss.item()}, correct, total
 
     def run_val(self, input, loss_mod=None):
-        x = input['x']
-        y = input['y']
+        x = input['x'].to(self.device)
+        masked_x = input['masked_x'].to(self.device)
 
-        output, bert_output = self.forward(x)
-        loss_fn, bert_loss_fn = self.get_loss()
-        loss = loss_fn(output, y)
+        prediction = self.forward(masked_x)
 
         batch_size, inst_size, seq_size = x.shape
-        bert_target = x.view(-1)
-        bert_output = bert_output.view(batch_size * inst_size * seq_size, -1)
-        bert_loss = bert_loss_fn(bert_output, bert_target)
-        
+        x = x.view(batch_size * inst_size *seq_size)
+        prediction = prediction.view(batch_size * inst_size *seq_size, -1)
+        loss_fn = self.get_loss()
+        loss = loss_fn(prediction, x)
+
         if loss_mod is not None:
             loss *= loss_mod
-            bert_loss *= loss_mod
 
-        return {'loss': loss.item(), 'bert_loss': bert_loss.item()}, y.tolist(), output.tolist()
+        prediction = prediction.detach()
+        correct = (x == torch.max(prediction, dim=-1)[1]).sum().item()
+        total = (x != 0).sum().item()
+
+        return {'loss': loss.item()}, correct, total
     
     def run(self, input, loss_mod=None, is_train=False):
         if is_train:
@@ -145,6 +155,109 @@ class BertModule(nn.Module):
 
     def get_loss(self):
         raise NotImplementedError()
+    
+# class BertCheckpointModule(nn.Module):
+#     def __init__(self, use_checkpoint=False):
+#         super().__init__()
+
+#         self.use_checkpoint = use_checkpoint
+#         self.device = get_device(should_print=False)
+    
+#     def checkpoint_forward(self, x):
+#         raise NotImplementedError()
+    
+#     def run_train(self, input, loss_mod=None):
+#         x = input['x'].to(self.device)
+
+#         if self.use_checkpoint:
+#             output = self.checkpoint_forward(x)
+#         else:
+#             output = self.forward(x)
+
+#         loss_fn = self.get_loss()
+#         y = input['y'].to(self.device)
+#         loss = loss_fn(output, y)
+
+#         if loss_mod is not None:
+#             loss *= loss_mod
+#         loss.backward()
+
+#         return {'loss': loss.item()}, y.tolist(), output.tolist()
+
+#     def run_train(self, input, loss_mod=None):
+#         x = input['x'].to(self.device)
+#         masked_x = input['masked_x'].to(self.device)
+
+#         prediction = self.forward(masked_x)
+
+#         batch_size, inst_size, seq_size = x.shape
+#         x = x.view(batch_size * inst_size *seq_size)
+#         prediction = prediction.view(batch_size * inst_size *seq_size, -1)
+#         loss_fn = self.get_loss()
+#         loss = loss_fn(prediction, x)
+
+#         if loss_mod is not None:
+#             loss *= loss_mod
+#         loss.backward()
+
+#         prediction = prediction.detach()
+#         correct = (x == torch.max(prediction, dim=-1)[1]).sum().item()
+
+#         total = (x != 0).sum().item()
+
+#         return {'loss': loss.item()}, correct, total
+    
+#         x = input['x'].to(self.device)
+#         masked_x = input['masked_x'].to(self.device)
+
+#         prediction = self.forward(masked_x)
+
+#         batch_size, inst_size, seq_size = x.shape
+#         x = x.view(batch_size * inst_size *seq_size)
+#         prediction = prediction.view(batch_size * inst_size *seq_size, -1)
+#         loss_fn = self.get_loss()
+#         loss = loss_fn(prediction, x)
+
+#         if loss_mod is not None:
+#             loss *= loss_mod
+#         loss.backward()
+
+#         prediction = prediction.detach()
+#         correct = (x == torch.max(prediction, dim=-1)[1]).sum().item()
+
+#         total = (x != 0).sum().item()
+
+#         return {'loss': loss.item()}, correct, total
+
+#     def run_val(self, input, loss_mod=None):
+#         x = input['x'].to(self.device)
+#         masked_x = input['masked_x'].to(self.device)
+
+#         prediction = self.forward(masked_x)
+
+#         batch_size, inst_size, seq_size = x.shape
+#         x = x.view(batch_size * inst_size *seq_size)
+#         prediction = prediction.view(batch_size * inst_size *seq_size, -1)
+#         loss_fn = self.get_loss()
+#         loss = loss_fn(prediction, x)
+
+#         if loss_mod is not None:
+#             loss *= loss_mod
+
+#         prediction = prediction.detach()
+#         correct = (x == torch.max(prediction, dim=-1)[1]).sum().item()
+#         total = (x != 0).sum().item()
+
+#         return {'loss': loss.item()}, correct, total
+    
+#     def run(self, input, loss_mod=None, is_train=False):
+#         if is_train:
+#             return self.run_train(input, loss_mod=loss_mod)
+#         else:
+#             return self.run_val(input, loss_mod=loss_mod)
+
+#     def get_loss(self):
+#         raise NotImplementedError()
 
 class UnRollingModule(nn.Module):
     def __init__(self):

@@ -113,17 +113,23 @@ class PadZeroCheckpoint(CheckpointModule):
             for idx in range((self.num_instruction_layer + self.checkpoint_cnt - 1)//self.checkpoint_cnt):
                 output = checkpoint(method_dummy_wrapper2(self._basic_block_layer), output, idx, self.dummy)
 
-        output, (batch_size, inst_size, seq_size), mask, op_seq_mask = output
-        output = output.view(batch_size, inst_size, seq_size, -1)
-        op_seq_mask = op_seq_mask.view(batch_size, inst_size)
-        output = output[:,:, 0,:]
-        output = output, (batch_size, inst_size, seq_size), mask, op_seq_mask
+        output = checkpoint(method_dummy_wrapper(self._sum), output, self.dummy)
 
         if self.num_op_layer > 0:
             for idx in range((self.num_op_layer + self.checkpoint_cnt - 1)//self.checkpoint_cnt):
                 output = checkpoint(method_dummy_wrapper2(self._op_layer), output, idx, self.dummy)
 
         return checkpoint(method_dummy_wrapper(self._pred), output, self.dummy)
+    
+    def _sum(self, output):
+        output, (batch_size, inst_size, seq_size), mask, op_seq_mask = output
+        output = output.view(batch_size, inst_size, seq_size, -1)
+        mask = mask.view(batch_size, inst_size, seq_size)
+        output = output.masked_fill(mask.unsqueeze(-1), 0)
+        output = output.sum(dim=2)
+        op_seq_mask = op_seq_mask.view(batch_size, inst_size)
+        output = output, (batch_size, inst_size, seq_size), mask, op_seq_mask
+        return output
 
     def _basic_setup(self, x):
         # Basic setup
@@ -191,12 +197,7 @@ class PadZeroCheckpoint(CheckpointModule):
         if self.num_instruction_layer > 0:
             output = self._instruction_layer(output, 0)
 
-        output, (batch_size, inst_size, seq_size), mask, op_seq_mask = output
-        output = output.view(batch_size, inst_size, seq_size, -1)
-        op_seq_mask = op_seq_mask.view(batch_size, inst_size)
-        output = output[:,:, 0,:]
-        output = output, (batch_size, inst_size, seq_size), mask, op_seq_mask
-
+        output = self._sum(output)
         
         if self.num_op_layer > 0:
             output = self._op_layer(output, 0)
