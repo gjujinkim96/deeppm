@@ -1,13 +1,13 @@
 model:
   model_class: NonStacked
   model_setting:
-    dim: 512
-    n_heads: 8
-    dim_ff: 2048
+    dim: 768
+    n_heads: 12
+    dim_ff: 3072
     pred_drop: 0.0
     vocab_size: 700
     loss_type: MapeLoss
-    num_basic_block_layer: 2
+    num_basic_block_layer: 16
     use_checkpoint: false
     checkpoint_cnt: 1
     pad_idx: from:data.special_token_idx.PAD
@@ -41,15 +41,23 @@ data:
     train_perc: 8
     val_perc: 2
     test_perc: 0
-    prepare_mode: non_stacked_extra_tags
+    prepare_mode: nonstacked_raw
     shuffle: false
-    instr_limit: 2
+    instr_limit: 1
   dataset_class: BasicBlockDataset
   dataset_setting:
     too_long_limit: 512
   # raw_data: false
   #  sample usage of predifined special token idxs
-  # special_token_idx:
+  special_token_idx:
+    PAD: 0
+    BLOCK_START: 1
+    BLOCK_END: 2
+    START: 3
+    END: 4  
+    SEP: 5
+    UNK: 6 
+    MSK: 7
   #   PAD: 0
   #   SRCS: 1
   #   DSTS: 2

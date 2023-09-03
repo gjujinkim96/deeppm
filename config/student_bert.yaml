@@ -1,51 +1,54 @@
 model:
-  model_class: BatchRNN
+  model_class: PadZeroCheckpoint
   model_setting:
-    embedding_size: 512
-    hidden_size: 512
-    num_layers: 2
+    dim: 512
+    n_heads: 8
+    dim_ff: 2048
+    pred_drop: 0.1
     vocab_size: 700
-    
     loss_type: MapeLoss
+    num_basic_block_layer: 2
+    num_instruction_layer: 2
+    num_op_layer: 4
     pad_idx: from:data.special_token_idx.PAD
-
+    use_checkpoint: true
+    checkpoint_cnt: 1
 train:
   seed: 3431
-  batch_size: 32
-  val_batch_size: 32
+  batch_size: 16
+  val_batch_size: 16
   n_epochs: 30
-  clip_grad_norm:  1.0
-  optimizer: SGD
+  clip_grad_norm: 0.2
+  optimizer: Adam
   optimizer_setting:
-    lr: 0.5
+    lr: 0.00001
+  lr_scheduler: LinearLR
   use_batch_step_lr: false
-  lr_scheduler: get_decay_after_delay_lr_sched
   lr_scheduler_setting:
-    delay: 2
-    div_factor: 1.2
+    total_iters: 5
   hyperparameter_testing:
     using: False
     mult: 0.2
 
 data:
   data_file: training_data/intel_core.data
-  # src_info_file: training_data/skl_mapping.csv
   data_setting:
     bert: false
-    only_unique: true
-    split_mode: num_instrs
+    only_unique: false
+    split_mode: none
     train_perc: 8
     val_perc: 2
     test_perc: 0
-    prepare_mode: stacked
+    prepare_mode: stacked_raw
     shuffle: true
-    instr_limit: 400
-    custom_idx_split: saved/SR:B/0831/idx_dict.dump
+    instr_limit: 1
+    custom_idx_split: null
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512
   # raw_data: false
   #  sample usage of predifined special token idxs
+  #  should not change special_token_idx
   special_token_idx:
     PAD: 0
     BLOCK_START: 1
@@ -55,11 +58,3 @@ data:
     SEP: 5
     UNK: 6 
     MSK: 7
-    # PAD: 0
-    # SRCS: 1
-    # DSTS: 2
-    # MEM: 3 # <MEM>
-    # MEM_FIN: 4  # </MEM>
-    # END: 5
-    # UNK: 6 
-    

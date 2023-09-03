@@ -1,71 +1,82 @@
 import torch
 import torch.nn as nn
 from utils import get_device
+from losses import load_losses
 
-from .pos_encoder import get_positional_encoding_1d
+from .base_class import CheckpointModule
+from .pos_encoder import get_positional_encoding_1d, get_positional_encoding_2d
+from .base import Seq, Op, BasicBlock
 
-class InstBlockOp(nn.Module):
-    def __init__(self, dim, n_heads, dim_ff, vocab_size=700, pad_idx=0, pred_drop=0.0):
-        super().__init__()
-
-        device = get_device(should_print=False)
-        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
-                                            batch_first=True)
-        self.f_block = nn.TransformerEncoder(block, 2, enable_nested_tensor=False)
-
-        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
-                                            batch_first=True)
-        self.s_block = nn.TransformerEncoder(block, 2, enable_nested_tensor=False)
-
-        block = nn.TransformerEncoderLayer(dim, n_heads, device=device, dim_feedforward=dim_ff,
-                                            batch_first=True)
-        self.t_block = nn.TransformerEncoder(block, 4, enable_nested_tensor=False)
-
+class InstBlockOp(CheckpointModule):
+    def __init__(self, use_checkpoint=False,
+                dim=512, n_heads=8, dim_ff=2048, 
+                pad_idx=0, vocab_size=700, pred_drop=0.0,
+                num_basic_block_layer=2,
+                num_instruction_layer=2,
+                num_op_layer=4, loss_type='MapeLoss', loss_fn_arg={},
+                t_dropout=0.1):
+        super().__init__(use_checkpoint=use_checkpoint)
 
         self.pad_idx = pad_idx
-        self.embed = nn.Embedding(vocab_size, dim, padding_idx = pad_idx,
-                                dtype=torch.float32, device=device) # token embedding
+        device = get_device(should_print=False)
+
+        self.instr = Seq(dim, dim_ff, n_heads, num_instruction_layer, t_dropout, use_checkpoint=self.use_checkpoint)
+        self.basic_block = BasicBlock(dim, dim_ff, n_heads, num_instruction_layer, t_dropout, use_checkpoint=self.use_checkpoint)
+        self.op = Op(dim, dim_ff, n_heads, num_instruction_layer, t_dropout, use_checkpoint=self.use_checkpoint)
+
+        self.embed = nn.Embedding(vocab_size, dim, padding_idx = pad_idx) # token embedding
+
         self.pos_embed = get_positional_encoding_1d(dim)
+        self.pos_embed2 = get_positional_encoding_2d(dim)
         self.prediction = nn.Sequential(
             nn.Dropout(pred_drop),
-            nn.Linear(dim, 1, dtype=torch.float32)
+            nn.Linear(dim, 1)
         )
+
+        self.loss = load_losses(loss_type, loss_fn_arg)
        
-    def forward(self, x, debug=False):
+    def forward(self, x):
         batch_size, inst_size, seq_size = x.shape
         mask = x == self.pad_idx
+        op_seq_mask = mask.all(dim=-1)
 
-        # get word emb
-        t_output = self.embed(x)
+        output = self.embed(x)
 
-        # add instruction pos emb
-        t_output = t_output.view(batch_size * inst_size, seq_size, -1)
-        mask = mask.view(batch_size * inst_size, seq_size)
-        t_output = self.pos_embed(t_output)
+        output = output.view(batch_size * inst_size, seq_size, -1)
+        output = self.pos_embed(output)
+        output = output.view(batch_size, inst_size, seq_size, -1)
 
-        # instruction level
-        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 1)
-        mod_mask = mask.masked_fill(mask.all(dim=-1).unsqueeze(-1), False)
-        t_output = self.f_block(t_output, src_key_padding_mask=mod_mask)
-        t_output = t_output.masked_fill(mask.all(dim=-1).unsqueeze(-1).unsqueeze(-1), 0)
+        output = self.instr(output, mask, op_seq_mask)
 
-        # block level
-        t_output = t_output.view(batch_size, inst_size * seq_size, -1)
-        mask = mask.view(batch_size, inst_size * seq_size)
-        t_output = self.s_block(t_output, src_key_padding_mask=mask)
+        output = self.pos_embed2(output)
+        output = self.basic_block(output, mask)
 
-        # add opcode level pos emb + opcode level
-        t_output = t_output.view(batch_size, inst_size, seq_size, -1)
-        t_output = t_output[:, :, 0, :]
-        t_output = self.pos_embed(t_output)
+        output = output.sum(dim=2)
+        output = self.pos_embed(output)
+        output = self.op(output, op_seq_mask)
+        output = self.prediction(output).squeeze(-1)
+        output = output.sum(dim=1)
+        return output
 
-        mask = mask.view(batch_size, inst_size, seq_size)
-        mask = mask.all(dim=-1)
+    def checkpoint_forward(self, x):
+        batch_size, inst_size, seq_size = x.shape
+        mask = x == self.pad_idx
+        op_seq_mask = mask.all(dim=-1)
 
-        t_output = self.t_block(t_output, src_key_padding_mask=mask)
+        output = self.embed(x)
 
-        # pred
-        t_output = t_output.masked_fill(mask.unsqueeze(-1), 0)
-        t_output = t_output.sum(dim = 1)
-        out = self.prediction(t_output).squeeze(-1)
-        return out
+        output = output.view(batch_size * inst_size, seq_size, -1)
+        output = self.pos_embed(output)
+        output = output.view(batch_size, inst_size, seq_size, -1)
+
+        output = self.instr.checkpoint_forward(output, mask, op_seq_mask)
+        output = self.pos_embed2(output)
+        output = self.basic_block.checkpoint_forward(output, mask)
+
+        output = output.sum(dim=2)
+        output = self.pos_embed(output)
+        output = self.op.checkpoint_forward(output, op_seq_mask)
+        output = self.prediction(output).squeeze(-1)
+        output = output.sum(dim=1)
+        return output
+    

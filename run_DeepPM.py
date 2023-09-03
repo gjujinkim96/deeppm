@@ -10,6 +10,7 @@ from DeepPM_utils import *
 from experiments.experiment import Experiment
 import losses 
 
+import torch
 import dataset as ds
 import data.data_cost as dt
 import optimizers as opt
@@ -64,6 +65,10 @@ def main():
 
         cfg.pretrained.model = None
 
+
+    if getattr(cfg.data.data_setting, 'custom_idx_split', None) is not None:
+        idx_dict = torch.load(cfg.data.data_setting.custom_idx_split)
+
     data = load_data_from_cfg(args.small_size, cfg, dm, idx_dict)
 
     special_tokens = ['PAD', 'SRCS', 'DSTS', 'UNK', 'END', 'MEM', "MEM_FIN", "START", "OP", "INS_START", "INS_END"]
@@ -93,6 +98,7 @@ def main():
             cfg.data.dataset_setting.vocab_size = len(data.token_to_hot_idx)
     
     device = get_device()
+
     train_ds, val_ds, test_ds = ds.load_dataset_from_cfg(data, cfg, show=True)
 
     model = models.load_model_from_cfg(cfg)

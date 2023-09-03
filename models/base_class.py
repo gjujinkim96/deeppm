@@ -96,7 +96,7 @@ class CheckpointModule(nn.Module):
             return self.run_val(input, loss_mod=loss_mod)
     
     def get_loss(self):
-        raise NotImplementedError()
+        return self.loss
     
 class BertModule(nn.Module):
     def __init__(self):
@@ -154,7 +154,7 @@ class BertModule(nn.Module):
             return self.run_val(input, loss_mod=loss_mod)
 
     def get_loss(self):
-        raise NotImplementedError()
+        return self.loss
     
 # class BertCheckpointModule(nn.Module):
 #     def __init__(self, use_checkpoint=False):

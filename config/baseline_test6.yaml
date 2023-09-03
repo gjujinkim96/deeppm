@@ -46,6 +46,7 @@ data:
     prepare_mode: stacked_raw
     shuffle: false
     instr_limit: 1
+    custom_idx_split: saved/SR:B_splited_evenly/0901/idx_dict.dump
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512

@@ -14,7 +14,7 @@ class BasicBlockDataset(Dataset):
         return len(self.embeddings)
     
     def __getitem__(self, index):
-        return self.embeddings[index]
+        return self.embeddings[index], index
     
     def collate_fn(self, batch):
         short_max_len = 0
@@ -26,17 +26,22 @@ class BasicBlockDataset(Dataset):
         short_inst_len = []
         long_inst_len = []
 
-        for idx, item in enumerate(batch):
+        short_index = []
+        long_index = []
+
+        for idx, (item, index) in enumerate(batch):
             ten = torch.tensor(item.x)
             if len(ten) <= self.too_long_limit:
                 short_max_len = max(len(ten), short_max_len)
                 short_x.append(ten)
                 short_y.append(item.y)
                 short_inst_len.append(item.block.num_instrs())
+                short_index.append(index)
             else:
                 long_x.append(ten)
                 long_y.append(item.y)
                 long_inst_len.append(item.block.num_instrs())
+                long_index.append(index)
 
         if len(short_x) > 0:
             short_x = torch.stack(
@@ -50,15 +55,17 @@ class BasicBlockDataset(Dataset):
         short_dict = {
             'x': short_x,
             'y': short_y,
-            'inst_len': short_inst_len
+            'inst_len': short_inst_len,
+            'index': short_index,
         }
 
         long_list = [
             {
                 'x': x.unsqueeze(0),
                 'y': torch.tensor([y]),
-                'inst_len': [inst_len]
-            } for x, y, inst_len in zip(long_x, long_y, long_inst_len)
+                'inst_len': [inst_len],
+                'index': [index]
+            } for x, y, inst_len, index in zip(long_x, long_y, long_inst_len, long_index)
         ]
 
         return {

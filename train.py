@@ -23,37 +23,6 @@ from utils import correct_regression, seed_worker, get_worker_generator, mape_ba
 from collections import defaultdict
 
 
-# class Config(NamedTuple):
-#     """ Hyperparameters for training """
-#     lr_scheduler: str = "LinearLR"
-#     optimizer: str = "Adam"
-#     clip_grad_norm: float = 0.2
-#     loss_fn: str = "mape"
-#     seed: int = 3431 # random seed
-#     batch_size: int = 32
-#     val_batch_size: int = 32
-#     lr: int = 5e-5 # learning rate
-#     lr_total_iters: int = 5
-#     n_epochs: int = 10 # the number of epoch
-#     # `warm up` period = warmup(0.1)*total_steps
-#     # linearly increasing learning rate from zero to the specified value(5e-5)
-#     warmup: float = 0.001
-#     checkpoint: bool = False
-#     raw_data: bool = False
-#     use_batch_step_lr: bool = False
-#     hyperparameter_test: bool = False
-#     hyperparameter_test_mult: float = 0.2
-#     short_only: bool = False
-#     long_rev: bool = False
-#     fixed_vocab: bool = False
-    
-#     #save_steps: int = 100 # interval for saving model
-#     #total_steps: int = 100000 # total number of steps to train
-
-#     @classmethod
-#     def from_json(cls, file): # load config from json file
-#         return cls(**json.load(open(file, "r")))
-
 class LossReporter(object):
     def __init__(self, experiment, n_data_points):
         # type: (Experiment, int, tr.Train) -> None

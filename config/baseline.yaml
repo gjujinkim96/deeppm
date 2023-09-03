@@ -35,13 +35,14 @@ data:
   data_setting:
     bert: false
     only_unique: true
-    split_mode: none
+    split_mode: num_instrs
     train_perc: 8
     val_perc: 2
     test_perc: 0
     prepare_mode: stacked_raw
-    shuffle: False
+    shuffle: true
     instr_limit: 400
+    custom_idx_split: null
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512

@@ -19,12 +19,12 @@ def method_dummy_wrapper2(func):
 
 class PadZeroCheckpoint(CheckpointModule):
     """DeepPM model with Trasformer """
-    def __init__(self, use_checkpoint=False,
+    def __init__(self, use_checkpoint=False, checkpoint_cnt=2,
                 dim=512, n_heads=8, dim_ff=2048, 
                 pad_idx=628, vocab_size=700, pred_drop=0.0,
                 num_basic_block_layer=2,
                 num_instruction_layer=2,
-                num_op_layer=4, loss_type='MapeLoss', loss_fn_arg={}, checkpoint_cnt=2):
+                num_op_layer=4, loss_type='MapeLoss', loss_fn_arg={}):
         super().__init__(use_checkpoint=use_checkpoint)
 
         self.use_checkpoint = use_checkpoint
