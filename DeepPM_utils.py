@@ -8,6 +8,7 @@ from typing import Any, NamedTuple
 import data.data_cost as dt
 #import models.graph_models as md
 
+
 def dump_idx_to_root(expt, data):
     idx_dict = {
         'train': [datum.code_id for datum in data.train],

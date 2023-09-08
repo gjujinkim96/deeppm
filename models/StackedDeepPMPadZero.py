@@ -141,6 +141,4 @@ class StackedDeepPMPadZero(BaseModule):
 
         return out, output
     
-    def get_loss(self):
-        return self.loss
     

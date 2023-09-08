@@ -21,7 +21,7 @@ def load_data_from_cfg(is_small_size, cfg, given_token_mapping=None, given_train
         src_info_file=getattr(cfg.data, 'src_info_file', None),
         bert=data_setting.bert,
         shuffle=getattr(data_setting, 'shuffle', False),
-        given_token_mapping=given_token_mapping,
+        given_token_mapping=data_setting.given_token_mapping,
         instr_limit=getattr(data_setting, 'instr_limit', 400),
         given_train_val_test_idx=given_train_val_test_idx
     )

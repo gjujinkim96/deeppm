@@ -6,9 +6,17 @@
 # python run_DeepPM.py --cfg config/bert_mixed_only.yaml --exp_name bertMixedOnly --exp_override
 
 # new raw_data
-# python run_DeepPM.py --cfg config/baseline.yaml --exp_name SR:B_splited_evenly --exp_override
+
 # python run_DeepPM.py --cfg config/baseline_test6.yaml --exp_name I1:SR:BT6 --exp_override
 # python run_DeepPM.py --cfg config/non_stacked.yaml --exp_name I1:SR:ns_large_16_layer --exp_override
 
 # python run_DeepPM.py --cfg config/batch_rnn.yaml --exp_name Stacked:bi2_batch_32_norm_1.0 --exp_override
-python run_DeepPM.py --cfg config/inst_block_op.yaml --exp_name SR:inst_block_op --exp_override
+# python run_DeepPM.py --cfg config/inst_block_op.yaml --exp_name SR:inst_block_op --exp_override
+
+# python run_DeepPM.py --cfg config/student_bert_baseline.yaml --exp_name ST:sbert_mod_v2 --exp_override 
+
+
+# python run_DeepPM.py --cfg config/batch_rnn.yaml --exp_name ST:bi2_momentum_0.9 --exp_override
+
+# Try later
+python run_DeepPM.py --cfg config/baseline.yaml --exp_name SET:B --exp_override

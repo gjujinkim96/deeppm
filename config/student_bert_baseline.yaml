@@ -1,18 +1,19 @@
 model:
-  model_class: PadZeroCheckpoint
+  model_class: StudentBertBaseline
   model_setting:
     dim: 512
     n_heads: 8
     dim_ff: 2048
     pred_drop: 0.1
-    vocab_size: 700
+    vocab_size: 660
     loss_type: MapeLoss
     num_basic_block_layer: 2
     num_instruction_layer: 2
     num_op_layer: 4
     pad_idx: from:data.special_token_idx.PAD
-    use_checkpoint: true
-    checkpoint_cnt: 1
+    end_idx: from:data.special_token_idx.END
+    bert_weight: /home/guest_0702/studentBert/DeepPM_BERT_0828/output_batch64_lr5e-5/bert.model/bert_weights.pth
+    # bert_weight: student_bert/output_batch64_lr5e-5/bert.model/bert_weights.pth
 train:
   seed: 3431
   batch_size: 16
@@ -34,27 +35,29 @@ data:
   data_file: training_data/intel_core.data
   data_setting:
     bert: false
-    only_unique: false
-    split_mode: none
+    only_unique: true
+    split_mode: num_instrs
     train_perc: 8
     val_perc: 2
     test_perc: 0
-    prepare_mode: stacked_raw
+    prepare_mode: stacked
     shuffle: true
-    instr_limit: 1
-    custom_idx_split: null
-  dataset_class: StackedBlockDataset
+    instr_limit: 400
+    custom_idx_split: saved/SR:B/0831/idx_dict.dump
+    given_token_mapping: /home/guest_0702/studentBert/DeepPM_BERT_0828/saved/experiment1/0702/token_mapping.dump
+    # given_token_mapping: student_bert/DeepPM_BERT_0828/saved/experiment1/0702/token_mapping_old.dump
+  dataset_class: BERTNoMaskDataset
   dataset_setting:
     too_long_limit: 512
   # raw_data: false
   #  sample usage of predifined special token idxs
   #  should not change special_token_idx
-  special_token_idx:
-    PAD: 0
-    BLOCK_START: 1
-    BLOCK_END: 2
-    START: 3
-    END: 4  
-    SEP: 5
-    UNK: 6 
-    MSK: 7
+  # special_token_idx:
+  #   PAD: 0
+  #   BLOCK_START: 1
+  #   BLOCK_END: 2
+  #   START: 3
+  #   END: 4  
+  #   SEP: 5
+  #   UNK: 6 
+  #   MSK: 7

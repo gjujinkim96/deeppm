@@ -270,7 +270,6 @@ Loss: {self.loss}
         with torch.no_grad():
             for batch in tqdm(loader):
                 epoch_result += self.run_batch(batch, is_train=False)
-
         
         if self.is_bert:
             for k in epoch_result.loss:
@@ -294,7 +293,7 @@ Loss: {self.loss}
         else:
             wandb_log.wandb_log_val(epoch_result, epoch, is_bert=self.is_bert)
 
-        return epoch_result.mape
+        return epoch_result.mape, correct
 
     def train(self):
         """ Train Loop """
@@ -302,13 +301,14 @@ Loss: {self.loss}
         if self.is_bert:
             best_mape = -1
         else:
-            best_mape = float('inf')
+            best_accr = -1
         generator = get_worker_generator(self.seed)
         resultfile = os.path.join(self.expt.experiment_root_path(), 'validation_results.txt')
 
         self.model.to(self.device)
+        self.optimizer.zero_grad()
 
-        loader = DataLoader(self.train_ds, shuffle=True, num_workers=self.cpu_count, 
+        loader = DataLoader(self.train_ds, shuffle=True, num_workers=self.cpu_count, drop_last=True,
                         batch_size=self.cfg.train.batch_size, collate_fn=self.train_ds.collate_fn,
                         worker_init_fn=seed_worker, generator=generator) 
         epoch_len = len(loader)
@@ -329,15 +329,18 @@ Loss: {self.loss}
                     break
                 
                 batch_result = self.run_batch(batch, is_train=True)
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm)
 
-                self.optimizer.step()
+                if not self.cfg.train.gradient_accumlation.using or (idx + 1) % self.cfg.train.gradient_accumlation.steps == 0:
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad_norm)
+                    self.optimizer.step()
+                    self.optimizer.zero_grad()
+                
 
                 wandb_log.wandb_log_train(batch_result, self.lr_scheduler.get_last_lr()[0], 
                             epoch=epoch_no + idx/epoch_len, is_bert=self.is_bert)
 
 
-                step += 1
+                step += 1 
             
                 epoch_loss_sum += batch_result.loss_sum['loss']
                 total_cnts += batch_result.batch_len
@@ -358,15 +361,15 @@ Loss: {self.loss}
             self.loss_reporter.end_epoch(self.model,self.optimizer, self.lr_scheduler, epoch_loss_avg)
 
 
-            cur_mape = self.validate(resultfile, epoch_no + 1)
+            cur_mape, correct = self.validate(resultfile, epoch_no + 1)
 
             if self.is_bert:
                 if cur_mape >= best_mape:
                     best_mape = cur_mape
                     self.loss_reporter.save_best(self.model, self.optimizer, self.lr_scheduler)
             else:
-                if cur_mape < best_mape:
-                    best_mape = cur_mape
+                if correct >= best_accr:
+                    best_accr = correct
                     self.loss_reporter.save_best(self.model, self.optimizer, self.lr_scheduler)
 
             if not self.cfg.train.use_batch_step_lr:

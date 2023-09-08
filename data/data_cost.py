@@ -853,11 +853,15 @@ def load_data(data_savefile, small_size=False, only_unique=False,
     split_mode: num_instrs+srcs, num_instrs, none
     prepare_mode: simplify, stacked, stacked_extra_tags, single_line, non_stacked_extra_tags
     '''
-    if bert:
-        data = BertInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=given_token_mapping)
+    if given_token_mapping is not None:
+        hot_idx = torch.load(given_token_mapping, map_location=torch.device('cpu'))[0]
     else:
-        data = DataInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=given_token_mapping)
+        hot_idx = None
 
+    if bert:
+        data = BertInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=hot_idx)
+    else:
+        data = DataInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=hot_idx)
 
     if small_size:
         data.raw_data = torch.load(data_savefile)[:100]

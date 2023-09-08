@@ -11,13 +11,14 @@ model:
 
 train:
   seed: 3431
-  batch_size: 32
-  val_batch_size: 32
+  batch_size: 4
+  val_batch_size: 4
   n_epochs: 30
-  clip_grad_norm:  1.0
+  clip_grad_norm:  0.2
   optimizer: SGD
   optimizer_setting:
     lr: 0.5
+    momentum: 0.9
   use_batch_step_lr: false
   lr_scheduler: get_decay_after_delay_lr_sched
   lr_scheduler_setting:
@@ -26,8 +27,11 @@ train:
   hyperparameter_testing:
     using: False
     mult: 0.2
-
+  gradient_accumlation:
+    using: false
+    steps: 256
 data:
+  # data_file: training_data/spec_core_0714.data
   data_file: training_data/intel_core.data
   # src_info_file: training_data/skl_mapping.csv
   data_setting:
@@ -41,6 +45,7 @@ data:
     shuffle: true
     instr_limit: 400
     custom_idx_split: saved/SR:B/0831/idx_dict.dump
+    given_token_mapping: null
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512

@@ -29,9 +29,13 @@ train:
   hyperparameter_testing:
     using: False
     mult: 0.2
+  gradient_accumlation:
+    using: False
+    steps: 4
 
 data:
   data_file: training_data/spec_core_0714.data
+  # data_file: training_data/intel_core.data
   data_setting:
     bert: false
     only_unique: true
@@ -39,10 +43,11 @@ data:
     train_perc: 8
     val_perc: 2
     test_perc: 0
-    prepare_mode: stacked_raw
+    prepare_mode: stacked_extra_tags
     shuffle: true
     instr_limit: 400
-    custom_idx_split: null
+    custom_idx_split: saved/SR:B/0831/idx_dict.dump
+    given_token_mapping: null
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512

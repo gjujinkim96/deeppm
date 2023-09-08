@@ -44,9 +44,9 @@ class Data(object):
         
         if given_train_val_test_idx is not None:
             datum_mapping = {datum.code_id: datum for datum in self.data}
-            self.train = [datum_mapping[idx] for idx in given_train_val_test_idx['train']]
-            self.val = [datum_mapping[idx] for idx in given_train_val_test_idx['val']]
-            self.test = [datum_mapping[idx] for idx in given_train_val_test_idx['test']]
+            self.train = [datum_mapping[idx] for idx in given_train_val_test_idx['train'] if idx in datum_mapping]
+            self.val = [datum_mapping[idx] for idx in given_train_val_test_idx['val'] if idx in datum_mapping]
+            self.test = [datum_mapping[idx] for idx in given_train_val_test_idx['test'] if idx in datum_mapping]
             return 
         
         def get_train_val(size, train, val):
