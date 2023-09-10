@@ -27,12 +27,31 @@ def custom_token_to_readable():
         token_to_readable[op_codes_offset + token_idx] = op_name
     return token_to_readable
 
+def token_to_readable():
+    token_to_readable = {}
+    reg_offset = 0
+    for name, token_idx in reg_dict.items():
+        token_to_readable[reg_offset + token_idx] = name
+        
+    int_immed_offset = reg_offset + reg_dict['REG_YMM15'] + 1
+    token_to_readable[int_immed_offset] = 'INT_IMMED'
+
+    float_immed_offset = int_immed_offset + 1
+    token_to_readable[float_immed_offset] = 'FLOAT_IMMED'
+
+    op_codes_offset = float_immed_offset + 1
+    for token_idx, op_name in op_dict.items():
+        token_to_readable[op_codes_offset + token_idx] = op_name
+    return token_to_readable
+
 class Translator:
-    def __init__(self, hot_idx_to_token_mapping, token_to_readable_type='custom'):
+    def __init__(self, hot_idx_to_token_mapping, token_to_readable_type='default'):
         self.hot_idx_to_token_mapping = hot_idx_to_token_mapping
 
         if token_to_readable_type == 'custom':
             self.token_to_readable_mapping = custom_token_to_readable()
+        elif token_to_readable_type == 'default':
+            self.token_to_readable_mapping = token_to_readable()
         else:
             raise NotImplementedError()
 
