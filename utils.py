@@ -14,8 +14,10 @@ from types import SimpleNamespace
 
 
 def recursive_vars(x):
+    if not isinstance(x, dict):
+        x = vars(x)
     ret = {}
-    for k, v in vars(x).items():
+    for k, v in x.items():
         if isinstance(v, SimpleNamespace):
             v = recursive_vars(v)
         ret[k] = v

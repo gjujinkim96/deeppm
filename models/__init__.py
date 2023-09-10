@@ -14,7 +14,7 @@ for file in os.listdir('models'):
 
 
 def load_model_from_cfg(cfg):
-    model_setting = recursive_vars(cfg.model.model_setting)
+    model_setting = recursive_vars(getattr(cfg.model, 'model_setting', {}))
 
     using_model_setting = {}
     for k, v in model_setting.items():

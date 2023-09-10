@@ -9,13 +9,3 @@ class DataItem:
     def __repr__(self):
         return f'---- Block ----\n{self.block}\nX: {self.x}  Y: {self.y}'
 
-class DataItemWithSim:
-    def __init__(self, x, y, block, code_id, sim):
-        self.x = x
-        self.y = y
-        self.block = block
-        self.code_id = code_id
-        self.sim = sim
-
-    def __repr__(self):
-        return f'---- Block ----\n{self.block}\nX: {self.x}  Y: {self.y}'

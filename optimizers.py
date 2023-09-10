@@ -9,7 +9,8 @@ for name, cls in inspect.getmembers(module, inspect.isclass):
 
 
 def load_optimizer_from_cfg(model, cfg):
-    return load_optimizer(model, cfg.train.optimizer, recursive_vars(cfg.train.optimizer_setting))
+    optimizer_setting = recursive_vars(getattr(cfg.train, 'optimizer_setting', {}))
+    return load_optimizer(model, cfg.train.optimizer, optimizer_setting)
 
 def load_optimizer(model, optimizer_type, optimizer_setting={}):
     if optimizer_type not in class_dict:

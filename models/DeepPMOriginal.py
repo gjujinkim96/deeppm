@@ -1,8 +1,6 @@
-import torch
 import torch.nn as nn
-from utils import get_device
 
-from .custom_transformer import PositionalEncoding, Block, Embeddings
+from .deeppm_original_transformer import PositionalEncoding, Block, Embeddings
 
 class DeepPMOriginal(nn.Module):
     """DeepPM model with Trasformer """

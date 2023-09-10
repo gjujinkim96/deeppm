@@ -39,14 +39,18 @@ class Data(object):
         for i in range(self.opcode_start, self.mem_start):
             self.costs[i] = np.random.randint(1,maxnum)
 
-    def generate_datasets(self, split_mode='none', hyperparameter_test=False, hyperparameter_test_mult=0.2, 
-                        split_perc=(8, 2, 0), shuffle=False, given_train_val_test_idx=None):
+    def generate_datasets(self, split_mode='none',
+                        split_perc=(8, 2, 0), shuffle=False, given_train_val_test_idx=None, small_size=False):
         
         if given_train_val_test_idx is not None:
             datum_mapping = {datum.code_id: datum for datum in self.data}
             self.train = [datum_mapping[idx] for idx in given_train_val_test_idx['train'] if idx in datum_mapping]
             self.val = [datum_mapping[idx] for idx in given_train_val_test_idx['val'] if idx in datum_mapping]
             self.test = [datum_mapping[idx] for idx in given_train_val_test_idx['test'] if idx in datum_mapping]
+
+            if small_size and len(self.val) == 0:
+                self.train = self.train[:-1]
+                self.val = [self.train[-1]]
             return 
         
         def get_train_val(size, train, val):
@@ -72,16 +76,6 @@ class Data(object):
             train_size, val_size = get_train_val(len(tmp), split_perc[0], split_perc[1])
             self.train.extend(tmp[:train_size])
             self.val.extend(tmp[train_size:])
-        elif split_mode.startswith('short_in_train:'):
-            limit = int(split_mode.split(':')[1])
-            train_size, val_size = get_train_val(len(tmp), split_perc[0], split_perc[1])
-            for datum in tmp[:train_size]:
-                if datum.block.num_instrs() <= limit:
-                    self.train.append(datum)
-                else:
-                    self.val.append(datum)
-            
-            self.val.extend(tmp[train_size:])
         elif split_mode == 'num_instrs':
             self.train = []
             self.val = []
@@ -106,41 +100,8 @@ class Data(object):
                 train_size, val_size = get_train_val(len(grouped_data), split_perc[0], split_perc[1])
                 self.train.extend(grouped_data[:train_size])
                 self.val.extend(grouped_data[train_size:])
-        elif split_mode == 'num_instrs+srcs':
-            self.train = []
-            self.val = []
-
-            g = defaultdict(list)
-
-            group_limit = [5, 10, 23, 50, 100, 150, 200]
-            def get_group_by_num_instrs(x):
-                for idx, limit in enumerate(group_limit):
-                    if x < limit:
-                        return idx
-                return idx + 1
-            
-            def get_group(datum):
-                num_instrs_group = get_group_by_num_instrs(datum.block.num_instrs())
-                return datum.src, num_instrs_group
-
-
-            for datum in tmp:
-                g_type = get_group(datum)
-                g[g_type].append(datum)
-
-            for k, grouped_data in g.items():
-                random.shuffle(grouped_data)
-
-                train_size, val_size = get_train_val(len(grouped_data), split_perc[0], split_perc[1])
-                self.train.extend(grouped_data[:train_size])
-                self.val.extend(grouped_data[train_size:])
         else:
             raise NotImplementedError()
-
-        if hyperparameter_test:
-            self.train = self.train[:int(len(self.train) * hyperparameter_test_mult)]
-            self.val = self.val[:int(len(self.val) * hyperparameter_test_mult)]
-            self.test = self.test[:int(len(self.test) * hyperparameter_test_mult)]
 
         saying = f'train: {len(self.train)}  val: {len(self.val)}'
         if len(self.test) > 0:

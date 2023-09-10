@@ -50,7 +50,8 @@ for name, cls in inspect.getmembers(module, inspect.isfunction):
 
 #  loading part
 def load_lr_scheduler_from_cfg(optimizer, cfg):
-    return load_lr_scheduler(optimizer, cfg.train.lr_scheduler, recursive_vars(cfg.train.lr_scheduler_setting))
+    lr_scheduler_setting = recursive_vars(getattr(cfg.train, 'lr_scheduler_setting', {}))
+    return load_lr_scheduler(optimizer, cfg.train.lr_scheduler, lr_scheduler_setting)
 
 def load_batch_lr_scheduler_from_cfg(optimizer, cfg, total_step):
     lr_sched_setting = recursive_vars(cfg.train.lr_scheduler_setting)

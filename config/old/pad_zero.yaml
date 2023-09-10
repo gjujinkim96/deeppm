@@ -1,9 +1,0 @@
-model_class: StackedDeepPMPadZero
-model_setting:
-  dim: 512
-  n_heads: 8
-  dim_ff: 2048
-  n_layers: 8
-  pred_drop: 0.0
-  max_len: 512
-  loss_fn: mape

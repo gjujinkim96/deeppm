@@ -15,6 +15,7 @@ import dataset as ds
 import data.data_cost as dt
 import optimizers as opt
 import lr_schedulers as lr_sch
+import losses as ls
 from pathlib import Path
 
 
@@ -71,7 +72,7 @@ def main():
 
     data = load_data_from_cfg(args.small_size, cfg, dm, idx_dict)
 
-    special_tokens = ['PAD', 'SRCS', 'DSTS', 'UNK', 'END', 'MEM', "MEM_FIN", "START", "OP", "INS_START", "INS_END"]
+    special_tokens = ['PAD', 'UNK', 'END', "START"]
     if getattr(cfg.data, 'special_token_idx', None) is None:
         special_token_idx = {}
     else:
@@ -102,7 +103,7 @@ def main():
     train_ds, val_ds, test_ds = ds.load_dataset_from_cfg(data, cfg, show=True)
 
     model = models.load_model_from_cfg(cfg)
-
+    loss_fn = ls.load_losses_from_cfg(cfg)
     optimizer = opt.load_optimizer_from_cfg(model, cfg)
 
     
@@ -123,9 +124,8 @@ def main():
     dump_obj_to_root(expt, cfg, 'config.dump')
     dump_idx_to_root(expt, data)
 
-    is_bert = getattr(cfg.train, 'is_bert', False)
     trainer = train.Trainer(cfg, model, (train_ds, val_ds, test_ds), expt, 
-                            optimizer, lr_scheduler, device, args.small_training, is_bert=is_bert)
+                            optimizer, lr_scheduler, loss_fn, device, args.small_training)
 
     # with torch.autograd.detect_anomaly():
     trainer.train()

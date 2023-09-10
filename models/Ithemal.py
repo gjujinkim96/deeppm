@@ -8,14 +8,9 @@ import torch.nn.functional as F
 #import utilities as ut
 #import data.data_cost as dt
 import torch.autograd as autograd
-import torch.optim as optim
-import math
-import numpy as np
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Union, Tuple
 #from . import model_utils
 from utils import get_device
-from .base_class import BaseModule
-from losses import load_losses
 
 # cuda = torch.device('cuda')
 # device =  torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -522,11 +517,9 @@ def get_last_false_values(x, mask, dim):
     output = torch.gather(x, dim, br)
     return output.squeeze(dim)
 
-class BatchRNN(AbstractGraphModule, BaseModule):
-
+class BatchRNN(AbstractGraphModule):
     def __init__(self, embedding_size=512, hidden_size=512, num_classes=1, 
-                pad_idx=0, num_layers=1, vocab_size=700,
-                loss_type='MapeLoss', loss_fn_arg={}):
+                pad_idx=0, num_layers=1, vocab_size=700):
         super(BatchRNN, self).__init__(embedding_size, hidden_size, num_classes)
     
         self.pad_idx = pad_idx
@@ -539,7 +532,6 @@ class BatchRNN(AbstractGraphModule, BaseModule):
         self._instr_init = self.rnn_init_hidden()
 
         self.linear = nn.Linear(self.hidden_size, self.num_classes)
-        self.loss = load_losses(loss_type, loss_fn_arg)
         self.set_learnable_embedding(mode='none', dictsize=vocab_size)
 
     def rnn_init_hidden(self):
@@ -616,7 +608,4 @@ class BatchRNN(AbstractGraphModule, BaseModule):
         #  B
         output = self.linear(final_state).squeeze(-1)
         return output
-    
-    def get_loss(self):
-        return self.loss
     

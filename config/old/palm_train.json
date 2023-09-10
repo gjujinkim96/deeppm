@@ -1,6 +1,0 @@
-{
-    "batch_size": 32,
-    "lr": 0.001,
-    "n_epochs": 10,
-    "warmup": 0.001
-}

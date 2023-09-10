@@ -19,8 +19,7 @@ sys.path.append('..')
 
 import data.utilities as ut
 from collections import defaultdict
-from .custom_data import BertInstructionEmbedding
-from .data_item import DataItem, DataItemWithSim
+from .data_item import DataItem
 
 from .custom_tokenizer import Tokenizer
 
@@ -41,6 +40,7 @@ class DataInstructionEmbedding(Data):
         self.data = []
         self.raw = []
         self.unk_tok = '<UNK>'
+        self.tokenizer = None
 
         if special_tokens is not None:
             self.next_hot_idx = max(special_tokens.values()) + 1
@@ -73,84 +73,7 @@ class DataInstructionEmbedding(Data):
                 self.hot_idx_to_token[self.token_to_hot_idx[elem]] = elem
         return self.token_to_hot_idx[elem]
 
-    def prepare_data(self, progress=True):
-        if progress:
-            iterator = tqdm(self.raw_data)
-        else:
-            iterator = self.raw_data
-
-        for (code_id, timing, code_intel, code_xml) in iterator:
-            if code_intel is None or len(code_intel.split('\n')) > instr_limit:
-                continue
-            
-            #if timing > 1112:#1000:
-            #    continue
-
-            block_root = ET.fromstring(code_xml)
-            instrs = []
-            raw_instrs = []
-            readable_raw = ['<START>']
-            curr_mem = self.mem_start
-            for _ in range(1): # repeat for duplicated blocks
-                # handle missing or incomplete code_intel
-                split_code_intel = itertools.chain((code_intel or '').split('\n'), itertools.repeat(''))
-                for (instr, m_code_intel) in zip(block_root, split_code_intel):
-                    raw_instr = []
-                    opcode = int(instr.find('opcode').text)
-                    raw_instr.extend([opcode, '<SRCS>'])
-                    #raw_instr.append(opcode)
-                    srcs = []
-                    for src in instr.find('srcs'):
-                        if src.find('mem') is not None:
-                            raw_instr.append('<MEM>')
-                            for mem_op in src.find('mem'):
-                                raw_instr.append(int(mem_op.text))
-                                srcs.append(int(mem_op.text))
-                            raw_instr.append('</MEM>')
-                            srcs.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(src.text))
-                            srcs.append(int(src.text))
-
-                    raw_instr.append('<DSTS>')
-                    dsts = []
-                    for dst in instr.find('dsts'):
-                        if dst.find('mem') is not None:
-                            raw_instr.append('<MEM>')
-                            for mem_op in dst.find('mem'):
-                                raw_instr.append(int(mem_op.text))
-                                # operands used to calculate dst mem ops are sources
-                                srcs.append(int(mem_op.text))
-                            raw_instr.append('</MEM>')
-                            dsts.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(dst.text))
-                            dsts.append(int(dst.text))
-
-                    raw_instr.append('<END>')
-                    readable_raw.extend(raw_instr)
-                    # raw_instrs.extend(list(map(hot_idxify, raw_instr)))
-                    instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
-                    instrs[-1].intel = m_code_intel
-
-            readable_raw.append('<DONE>')
-            raw_instrs = list(map(self.hot_idxify, readable_raw))
-            if len(raw_instrs) > 4000:
-                #print(len(raw_instrs))
-                continue
-
-            block = ut.BasicBlock(instrs)
-            block.create_dependencies()
-            datum = DataItem(raw_instrs, timing, block, code_id)
-
- 
-            self.data.append(datum)
-            self.raw.append(readable_raw)
-
-
-    def prepare_stacked_data(self, progress=True, src_df=None, instr_limit=400):
+    def prepare_stacked_data(self, progress=True, instr_limit=400):
         
         self.pad_idx = self.hot_idxify('<PAD>')
 
@@ -218,20 +141,20 @@ class DataInstructionEmbedding(Data):
             block = ut.BasicBlock(instrs)
             block.create_dependencies()
 
-            if src_df is not None:
-                src_type = src_df.loc[code_id].mapping
-                datum = DataItem(raw_instrs, timing, block, code_id, src_type)
-            else:
-                datum = DataItem(raw_instrs, timing, block, code_id)
+            datum = DataItem(raw_instrs, timing, block, code_id)
             self.data.append(datum)
 
             self.raw.append(readable_instrs)
 
-    def prepare_extra_tag_data(self, progress=True, src_df=None, instr_limit=400):
-        self.pad_idx = self.hot_idxify('<PAD>')
-        base_idx = self.hot_idxify('<BASE>')
-        index_idx = self.hot_idxify('<INDEX>')
-        
+    def set_tokenizer(self, mapping):
+        self.tokenizer = Tokenizer(dict(mapping))
+
+    def prepare_stacked_raw(self, progress=True, instr_limit=400):
+        if self.tokenizer is None:
+            self.tokenizer = Tokenizer.from_raw(self.raw_data)
+
+        self.pad_idx = self.tokenizer.mapping[self.tokenizer.pad_token]
+
 
         if progress:
             iterator = tqdm(self.raw_data)
@@ -239,280 +162,22 @@ class DataInstructionEmbedding(Data):
             iterator = self.raw_data
 
         for (code_id, timing, code_intel, code_xml) in iterator:
-        
-            block_root = ET.fromstring(code_xml)
-            instrs = []
-            raw_instrs = []
-            readable_instrs = []
-            curr_mem = self.mem_start
-
             if code_intel is None or len(code_intel.split('\n')) > instr_limit:
                 continue
-            
-            split_code_intel = itertools.chain((code_intel or '').split('\n'), itertools.repeat(''))
-
-            for (instr, m_code_intel) in zip(block_root, split_code_intel):
-                raw_instr = []
-                raw_instr.append('<START>')
-                raw_instr.append('<OP>')
-                opcode = int(instr.find('opcode').text)
-
-                raw_instr.extend([opcode, '<SRCS>'])
-                
-                srcs = []
-                for src in instr.findall('srcs'):
-                    for operand in src.findall('operand'):
-                        mem = operand.find('mem')
-                        if mem is not None:
-                            raw_instr.append('<MEM>')
-                            base = mem.find('base')
-                            if base is not None:
-                                raw_instr.append('<BASE>')
-                                raw_instr.append(int(base.text))
-                                srcs.append(int(base.text))
-                            
-                            index = mem.find('index')
-                            if index is not None:
-                                index_reg = index.find('reg')
-                                index_scale = index.find('scale')
-                                if index_reg is None or index_scale is None:
-                                    raise ValueError('missing reg, or scale under <index>')
-                                raw_instr.append('<INDEX>')
-                                raw_instr.append(int(index_reg.text))
-                                raw_instr.append('<SCALE>')
-                                raw_instr.append(int(index_scale.text))
-                                srcs.append(int(index_reg.text))
-                            
-                            disp = mem.find('disp')
-                            if disp is not None:
-                                raw_instr.append('<DISP>')
-                                raw_instr.append(int(disp.text))
-                                srcs.append(int(disp.text))
-
-                            raw_instr.append('</MEM>')
-                            srcs.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(operand.text))
-                            srcs.append(int(operand.text))
-       
-                raw_instr.append('<DSTS>')
-                dsts = []
-                for dst in instr.findall('dsts'):
-                    for operand in dst.findall('operand'):
-                        mem = operand.find('mem')
-                        if mem is not None:
-                            raw_instr.append('<MEM>')
-                            base = mem.find('base')
-                            if base is not None:
-                                raw_instr.append('<BASE>')
-                                raw_instr.append(int(base.text))
-                                srcs.append(int(base.text))
-                            
-                            index = mem.find('index')
-                            if index is not None:
-                                index_reg = index.find('reg')
-                                index_scale = index.find('scale')
-                                if index_reg is None or index_scale is None:
-                                    raise ValueError('missing reg, or scale under <index>')
-                                raw_instr.append('<INDEX>')
-                                raw_instr.append(int(index_reg.text))
-                                raw_instr.append('<SCALE>')
-                                raw_instr.append(int(index_scale.text))
-                                srcs.append(int(index_reg.text))
-                            
-                            disp = mem.find('disp')
-                            if disp is not None:
-                                raw_instr.append('<DISP>')
-                                raw_instr.append(int(disp.text))
-                                srcs.append(int(disp.text))
-
-                            raw_instr.append('</MEM>')
-                            dsts.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(operand.text))
-                            dsts.append(int(operand.text))
-
-                raw_instr.append('<END>')
-                raw_instrs.append(list(map(self.hot_idxify, raw_instr)))
-                readable_instrs.append(raw_instr)
-
-                instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
-                instrs[-1].intel = m_code_intel
-
-            block = ut.BasicBlock(instrs)
-            block.create_dependencies()
-
-            if src_df is not None:
-                src_type = src_df.loc[code_id].mapping
-                datum = DataItem(raw_instrs, timing, block, code_id, src_type)
-            else:
-                datum = DataItem(raw_instrs, timing, block, code_id)
-            self.data.append(datum)
-
-            self.raw.append(readable_instrs)
-
-    def prepare_non_stacked_extra_tag_data(self, progress=True, src_df=None, instr_limit=400):
         
-        self.pad_idx = self.hot_idxify('<PAD>')
-        base_idx = self.hot_idxify('<BASE>')
-        index_idx = self.hot_idxify('<INDEX>')
-        
-
-        if progress:
-            iterator = tqdm(self.raw_data)
-        else:
-            iterator = self.raw_data
-
-        for (code_id, timing, code_intel, code_xml) in iterator:
-        
-            block_root = ET.fromstring(code_xml)
-            instrs = []
-            raw_instrs = [self.hot_idxify('<BSTART>')]
-            readable_instrs = ['<BSTART>']
-            curr_mem = self.mem_start
-
-            if code_intel is None or len(code_intel.split('\n')) > instr_limit:
-                continue
-            
-            split_code_intel = itertools.chain((code_intel or '').split('\n'), itertools.repeat(''))
-
-            for (instr, m_code_intel) in zip(block_root, split_code_intel):
-                raw_instr = []
-                raw_instr.append('<START>')
-                raw_instr.append('<OP>')
-                opcode = int(instr.find('opcode').text)
-
-                raw_instr.extend([opcode, '<SRCS>'])
-                
-                srcs = []
-                for src in instr.findall('srcs'):
-                    for operand in src.findall('operand'):
-                        mem = operand.find('mem')
-                        if mem is not None:
-                            raw_instr.append('<MEM>')
-                            base = mem.find('base')
-                            if base is not None:
-                                raw_instr.append('<BASE>')
-                                raw_instr.append(int(base.text))
-                                srcs.append(int(base.text))
-                            
-                            index = mem.find('index')
-                            if index is not None:
-                                index_reg = index.find('reg')
-                                index_scale = index.find('scale')
-                                if index_reg is None or index_scale is None:
-                                    raise ValueError('missing reg, or scale under <index>')
-                                raw_instr.append('<INDEX>')
-                                raw_instr.append(int(index_reg.text))
-                                raw_instr.append('<SCALE>')
-                                raw_instr.append(int(index_scale.text))
-                                srcs.append(int(index_reg.text))
-                            
-                            disp = mem.find('disp')
-                            if disp is not None:
-                                raw_instr.append('<DISP>')
-                                raw_instr.append(int(disp.text))
-                                srcs.append(int(disp.text))
-
-                            raw_instr.append('</MEM>')
-                            srcs.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(operand.text))
-                            srcs.append(int(operand.text))
-       
-                raw_instr.append('<DSTS>')
-                dsts = []
-                for dst in instr.findall('dsts'):
-                    for operand in dst.findall('operand'):
-                        mem = operand.find('mem')
-                        if mem is not None:
-                            raw_instr.append('<MEM>')
-                            base = mem.find('base')
-                            if base is not None:
-                                raw_instr.append('<BASE>')
-                                raw_instr.append(int(base.text))
-                                srcs.append(int(base.text))
-                            
-                            index = mem.find('index')
-                            if index is not None:
-                                index_reg = index.find('reg')
-                                index_scale = index.find('scale')
-                                if index_reg is None or index_scale is None:
-                                    raise ValueError('missing reg, or scale under <index>')
-                                raw_instr.append('<INDEX>')
-                                raw_instr.append(int(index_reg.text))
-                                raw_instr.append('<SCALE>')
-                                raw_instr.append(int(index_scale.text))
-                                srcs.append(int(index_reg.text))
-                            
-                            disp = mem.find('disp')
-                            if disp is not None:
-                                raw_instr.append('<DISP>')
-                                raw_instr.append(int(disp.text))
-                                srcs.append(int(disp.text))
-
-                            raw_instr.append('</MEM>')
-                            dsts.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(operand.text))
-                            dsts.append(int(operand.text))
-
-                raw_instr.append('<END>')
-                raw_instrs.extend(list(map(self.hot_idxify, raw_instr)))
-                readable_instrs.extend(raw_instr)
-
-                instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
-                instrs[-1].intel = m_code_intel
-
-            block = ut.BasicBlock(instrs)
-            block.create_dependencies()
-
-            raw_instrs.append(self.hot_idxify('<BEND>'))
-
-            if src_df is not None:
-                src_type = src_df.loc[code_id].mapping
-                datum = DataItem(raw_instrs, timing, block, code_id, src_type)
-            else:
-                datum = DataItem(raw_instrs, timing, block, code_id)
-            self.data.append(datum)
-
-            self.raw.append(readable_instrs)
-
-    def prepare_simplified(self, progress=True):
-        sim_mapping = {}
-        def sim_idxify(token):
-            if token not in sim_mapping:
-                sim_mapping[token] = len(sim_mapping)
-            return sim_mapping[token]
-            
-        self.pad_idx = self.hot_idxify('<PAD>')
-        sim_idxify('<PAD>')
-
-        if progress:
-            iterator = tqdm(self.raw_data)
-        else:
-            iterator = self.raw_data
-
-        for (code_id, timing, code_intel, code_xml) in iterator:
+            new_cur = self.tokenizer(code_intel, True, True)
 
             block_root = ET.fromstring(code_xml)
             instrs = []
             raw_instrs = []
             readable_instrs = []
             curr_mem = self.mem_start
-            sims = []
             for _ in range(1): # repeat for duplicated blocks
                 # handle missing or incomplete code_intel
                 split_code_intel = itertools.chain((code_intel or '').split('\n'), itertools.repeat(''))
                 for (instr, m_code_intel) in zip(block_root, split_code_intel):
                     raw_instr = []
                     opcode = int(instr.find('opcode').text)
-                    src_mem_cnt = 0
-                    dst_mem_cnt = 0
                     raw_instr.extend([opcode, '<SRCS>'])
                     
                     srcs = []
@@ -525,7 +190,6 @@ class DataInstructionEmbedding(Data):
                             raw_instr.append('</MEM>')
                             srcs.append(curr_mem)
                             curr_mem += 1
-                            src_mem_cnt += 1
                         else:
                             raw_instr.append(int(src.text))
                             srcs.append(int(src.text))
@@ -542,7 +206,6 @@ class DataInstructionEmbedding(Data):
                             raw_instr.append('</MEM>')
                             dsts.append(curr_mem)
                             curr_mem += 1
-                            dst_mem_cnt += 1
                         else:
                             raw_instr.append(int(dst.text))
                             dsts.append(int(dst.text))
@@ -550,280 +213,24 @@ class DataInstructionEmbedding(Data):
                     raw_instr.append('<END>')
                     raw_instrs.append(list(map(self.hot_idxify, raw_instr)))
                     readable_instrs.append(raw_instr)
+
                     instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
                     instrs[-1].intel = m_code_intel
-                    sims.append(sim_idxify(f'{opcode}_{src_mem_cnt}_{dst_mem_cnt}'))
-            if len(raw_instrs) > 400:
+            if len(raw_instrs) > instr_limit:
                 continue
-
-            block = ut.BasicBlock(instrs)
-            block.create_dependencies()
-            datum = DataItemWithSim(raw_instrs, timing, block, code_id, sims)
-            self.data.append(datum)
-
-            self.raw.append(readable_instrs)
-
-
-    def prepare_stacked_raw(self, progress=True, src_df=None, instr_limit=400):
-        self.tokenizer = Tokenizer.from_raw(self.raw_data)
-
-        self.pad_idx = self.tokenizer.mapping[self.tokenizer.pad_token]
-
-        if progress:
-            iterator = tqdm(self.raw_data)
-        else:
-            iterator = self.raw_data
-
-        for (code_id, timing, code_intel, code_xml) in iterator:
-        
-            block_root = ET.fromstring(code_xml)
-            instrs = []
-            raw_instrs = []
-            readable_instrs = []
-            curr_mem = self.mem_start
-
-            if code_intel is None or len(code_intel.split('\n')) > instr_limit:
-                continue
-            
-            new_cur = self.tokenizer(code_intel, True, True)
-
-            split_code_intel = itertools.chain((code_intel or '').split('\n'), itertools.repeat(''))
-
-            for (instr, m_code_intel) in zip(block_root, split_code_intel):
-                raw_instr = []
-                raw_instr.append('<START>')
-                raw_instr.append('<OP>')
-                opcode = int(instr.find('opcode').text)
-
-                raw_instr.extend([opcode, '<SRCS>'])
-                
-                srcs = []
-                for src in instr.findall('srcs'):
-                    for operand in src.findall('operand'):
-                        mem = operand.find('mem')
-                        if mem is not None:
-                            raw_instr.append('<MEM>')
-                            base = mem.find('base')
-                            if base is not None:
-                                raw_instr.append('<BASE>')
-                                raw_instr.append(int(base.text))
-                                srcs.append(int(base.text))
-                            
-                            index = mem.find('index')
-                            if index is not None:
-                                index_reg = index.find('reg')
-                                index_scale = index.find('scale')
-                                if index_reg is None or index_scale is None:
-                                    raise ValueError('missing reg, or scale under <index>')
-                                raw_instr.append('<INDEX>')
-                                raw_instr.append(int(index_reg.text))
-                                raw_instr.append('<SCALE>')
-                                raw_instr.append(int(index_scale.text))
-                                srcs.append(int(index_reg.text))
-                            
-                            disp = mem.find('disp')
-                            if disp is not None:
-                                raw_instr.append('<DISP>')
-                                raw_instr.append(int(disp.text))
-                                srcs.append(int(disp.text))
-
-                            raw_instr.append('</MEM>')
-                            srcs.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(operand.text))
-                            srcs.append(int(operand.text))
-       
-                raw_instr.append('<DSTS>')
-                dsts = []
-                for dst in instr.findall('dsts'):
-                    for operand in dst.findall('operand'):
-                        mem = operand.find('mem')
-                        if mem is not None:
-                            raw_instr.append('<MEM>')
-                            base = mem.find('base')
-                            if base is not None:
-                                raw_instr.append('<BASE>')
-                                raw_instr.append(int(base.text))
-                                srcs.append(int(base.text))
-                            
-                            index = mem.find('index')
-                            if index is not None:
-                                index_reg = index.find('reg')
-                                index_scale = index.find('scale')
-                                if index_reg is None or index_scale is None:
-                                    raise ValueError('missing reg, or scale under <index>')
-                                raw_instr.append('<INDEX>')
-                                raw_instr.append(int(index_reg.text))
-                                raw_instr.append('<SCALE>')
-                                raw_instr.append(int(index_scale.text))
-                                srcs.append(int(index_reg.text))
-                            
-                            disp = mem.find('disp')
-                            if disp is not None:
-                                raw_instr.append('<DISP>')
-                                raw_instr.append(int(disp.text))
-                                srcs.append(int(disp.text))
-
-                            raw_instr.append('</MEM>')
-                            dsts.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(operand.text))
-                            dsts.append(int(operand.text))
-
-                raw_instr.append('<END>')
-                raw_instrs.append(list(map(self.hot_idxify, raw_instr)))
-                readable_instrs.append(raw_instr)
-
-                instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
-                instrs[-1].intel = m_code_intel
 
             block = ut.BasicBlock(instrs)
             block.create_dependencies()
 
             raw_instrs = new_cur
-            if src_df is not None:
-                src_type = src_df.loc[code_id].mapping
-                datum = DataItem(raw_instrs, timing, block, code_id, src_type)
-            else:
-                datum = DataItem(raw_instrs, timing, block, code_id)
+
+            datum = DataItem(raw_instrs, timing, block, code_id)
             self.data.append(datum)
 
-            self.token_to_hot_idx = dict(self.tokenizer.mapping)
-            self.hot_idx_to_token = dict(self.tokenizer.rev_mapping)
             self.raw.append(readable_instrs)
 
-    def prepare_nonstacked_raw(self, progress=True, src_df=None, instr_limit=400):
-        self.tokenizer = Tokenizer.from_raw(self.raw_data)
-
-        self.pad_idx = self.tokenizer.mapping[self.tokenizer.pad_token]
-
-        if progress:
-            iterator = tqdm(self.raw_data)
-        else:
-            iterator = self.raw_data
-
-        for (code_id, timing, code_intel, code_xml) in iterator:
-        
-            block_root = ET.fromstring(code_xml)
-            instrs = []
-            raw_instrs = []
-            readable_instrs = []
-            curr_mem = self.mem_start
-
-            if code_intel is None or len(code_intel.split('\n')) > instr_limit:
-                continue
-            
-            new_cur = self.tokenizer(code_intel, True, False)
-
-            split_code_intel = itertools.chain((code_intel or '').split('\n'), itertools.repeat(''))
-
-            for (instr, m_code_intel) in zip(block_root, split_code_intel):
-                raw_instr = []
-                raw_instr.append('<START>')
-                raw_instr.append('<OP>')
-                opcode = int(instr.find('opcode').text)
-
-                raw_instr.extend([opcode, '<SRCS>'])
-                
-                srcs = []
-                for src in instr.findall('srcs'):
-                    for operand in src.findall('operand'):
-                        mem = operand.find('mem')
-                        if mem is not None:
-                            raw_instr.append('<MEM>')
-                            base = mem.find('base')
-                            if base is not None:
-                                raw_instr.append('<BASE>')
-                                raw_instr.append(int(base.text))
-                                srcs.append(int(base.text))
-                            
-                            index = mem.find('index')
-                            if index is not None:
-                                index_reg = index.find('reg')
-                                index_scale = index.find('scale')
-                                if index_reg is None or index_scale is None:
-                                    raise ValueError('missing reg, or scale under <index>')
-                                raw_instr.append('<INDEX>')
-                                raw_instr.append(int(index_reg.text))
-                                raw_instr.append('<SCALE>')
-                                raw_instr.append(int(index_scale.text))
-                                srcs.append(int(index_reg.text))
-                            
-                            disp = mem.find('disp')
-                            if disp is not None:
-                                raw_instr.append('<DISP>')
-                                raw_instr.append(int(disp.text))
-                                srcs.append(int(disp.text))
-
-                            raw_instr.append('</MEM>')
-                            srcs.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(operand.text))
-                            srcs.append(int(operand.text))
-       
-                raw_instr.append('<DSTS>')
-                dsts = []
-                for dst in instr.findall('dsts'):
-                    for operand in dst.findall('operand'):
-                        mem = operand.find('mem')
-                        if mem is not None:
-                            raw_instr.append('<MEM>')
-                            base = mem.find('base')
-                            if base is not None:
-                                raw_instr.append('<BASE>')
-                                raw_instr.append(int(base.text))
-                                srcs.append(int(base.text))
-                            
-                            index = mem.find('index')
-                            if index is not None:
-                                index_reg = index.find('reg')
-                                index_scale = index.find('scale')
-                                if index_reg is None or index_scale is None:
-                                    raise ValueError('missing reg, or scale under <index>')
-                                raw_instr.append('<INDEX>')
-                                raw_instr.append(int(index_reg.text))
-                                raw_instr.append('<SCALE>')
-                                raw_instr.append(int(index_scale.text))
-                                srcs.append(int(index_reg.text))
-                            
-                            disp = mem.find('disp')
-                            if disp is not None:
-                                raw_instr.append('<DISP>')
-                                raw_instr.append(int(disp.text))
-                                srcs.append(int(disp.text))
-
-                            raw_instr.append('</MEM>')
-                            dsts.append(curr_mem)
-                            curr_mem += 1
-                        else:
-                            raw_instr.append(int(operand.text))
-                            dsts.append(int(operand.text))
-
-                raw_instr.append('<END>')
-                raw_instrs.append(list(map(self.hot_idxify, raw_instr)))
-                readable_instrs.append(raw_instr)
-
-                instrs.append(ut.Instruction(opcode, srcs, dsts, len(instrs)))
-                instrs[-1].intel = m_code_intel
-
-            block = ut.BasicBlock(instrs)
-            block.create_dependencies()
-
-            raw_instrs = new_cur
-            if src_df is not None:
-                src_type = src_df.loc[code_id].mapping
-                datum = DataItem(raw_instrs, timing, block, code_id, src_type)
-            else:
-                datum = DataItem(raw_instrs, timing, block, code_id)
-            self.data.append(datum)
-
-            self.token_to_hot_idx = dict(self.tokenizer.mapping)
-            self.hot_idx_to_token = dict(self.tokenizer.rev_mapping)
-            self.raw.append(readable_instrs)
-
+        self.token_to_hot_idx = dict(self.tokenizer.mapping)
+        self.hot_idx_to_token = dict(self.tokenizer.rev_mapping)
 
 def extract_unique(data, raw):    
     grouped = defaultdict(list)
@@ -844,24 +251,20 @@ def extract_unique(data, raw):
 
 def load_data(data_savefile, small_size=False, only_unique=False,
             split_mode='none', split_perc=(8, 2, 0),
-            hyperparameter_test=False, hyperparameter_test_mult=0.2,
-            special_tokens=None, src_info_file=None, bert=False, 
+            special_tokens=None, 
             prepare_mode='stacked', shuffle=False, given_token_mapping=None,
             instr_limit=400, given_train_val_test_idx=None,
     ):
     '''
-    split_mode: num_instrs+srcs, num_instrs, none
-    prepare_mode: simplify, stacked, stacked_extra_tags, single_line, non_stacked_extra_tags
+    split_mode: num_instrs, none
+    prepare_mode: stacked, stacked_raw
     '''
     if given_token_mapping is not None:
         hot_idx = torch.load(given_token_mapping, map_location=torch.device('cpu'))[0]
     else:
         hot_idx = None
 
-    if bert:
-        data = BertInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=hot_idx)
-    else:
-        data = DataInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=hot_idx)
+    data = DataInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=hot_idx)
 
     if small_size:
         data.raw_data = torch.load(data_savefile)[:100]
@@ -869,27 +272,12 @@ def load_data(data_savefile, small_size=False, only_unique=False,
         data.raw_data = torch.load(data_savefile)
     data.read_meta_data()
 
-    if src_info_file is not None:
-        src_df = pd.read_csv(src_info_file, index_col='idx')
-    else:
-        src_df = None
-
-    if prepare_mode == 'simplify':
-        raise NotImplementedError()
-        data.prepare_simplified()
-    elif prepare_mode == 'stacked':
-        data.prepare_stacked_data(src_df=src_df, instr_limit=instr_limit)
-    elif prepare_mode == 'stacked_extra_tags':
-        data.prepare_extra_tag_data(src_df=src_df, instr_limit=instr_limit)
-    elif prepare_mode == 'non_stacked_extra_tags':
-        data.prepare_non_stacked_extra_tag_data(src_df=src_df, instr_limit=instr_limit)
+    if prepare_mode == 'stacked':
+        data.prepare_stacked_data(instr_limit=instr_limit)
     elif prepare_mode == 'stacked_raw':
-        data.prepare_stacked_raw(src_df=src_df, instr_limit=instr_limit)
-    elif prepare_mode == 'nonstacked_raw':
-        data.prepare_nonstacked_raw(src_df=src_df, instr_limit=instr_limit)
-    elif prepare_mode == 'single_line':
-        raise NotImplementedError()
-        data.prepare_data()
+        if hot_idx is not None:
+            data.set_tokenizer(hot_idx)
+        data.prepare_stacked_raw(instr_limit=instr_limit)
     else:
         raise NotImplementedError()
 
@@ -898,8 +286,8 @@ def load_data(data_savefile, small_size=False, only_unique=False,
 
     # change test pert or some way to split train, val test in constructor? no in generate dataset!!
     #  remove self.perct in base class
-    data.generate_datasets(split_mode=split_mode, split_perc=split_perc, hyperparameter_test=hyperparameter_test, 
-                        hyperparameter_test_mult=hyperparameter_test_mult, shuffle=shuffle, given_train_val_test_idx=given_train_val_test_idx
-                        )
+    data.generate_datasets(split_mode=split_mode, split_perc=split_perc,
+                        shuffle=shuffle, given_train_val_test_idx=given_train_val_test_idx, small_size=small_size
+    )
 
     return data

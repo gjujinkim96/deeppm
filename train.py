@@ -3,24 +3,17 @@
 """ Training Config & Helper Classes  """
 
 import os
-import json
 from typing import NamedTuple
 from tqdm.auto import tqdm
 
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torch.autograd as autograd
 import time
-import losses as ls
 import wandb_log
 from torch.utils.data import DataLoader
 import multiprocessing
-import pandas as pd
 from operator import itemgetter
 from utils import correct_regression, seed_worker, get_worker_generator, mape_batch
-# import plotting
-from collections import defaultdict
 
 
 class LossReporter(object):
@@ -129,18 +122,18 @@ class LossReporter(object):
 
 class Trainer(object):
     """ Training Helper Class """
-    def __init__(self, cfg, model, ds, expt, optimizer, lr_scheduler, device, small_training, is_bert=False):
+    def __init__(self, cfg, model, ds, expt, optimizer, lr_scheduler, loss_fn, device, small_training):
         self.cfg = cfg # config for training : see class Config
         self.model = model
         self.train_ds, self.val_ds, self.test_ds = ds
         self.expt = expt
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
+        self.loss_fn = loss_fn
         self.save_dir = self.expt.experiment_root_path()
         self.device = device # device name
 
         self.loss_reporter = LossReporter(expt, len(self.train_ds))
-        self.is_bert = is_bert
 
         self.clip_grad_norm = cfg.train.clip_grad_norm
         self.small_training = small_training
@@ -166,8 +159,8 @@ class Trainer(object):
             self.inst_lens = []
             self.index = []
             
-            self.loss = defaultdict(lambda: 0)
-            self.loss_sum = defaultdict(lambda: 0)
+            self.loss = 0
+            self.loss_sum = 0
             self.mape = 0
             self.mape_sum = 0
 
@@ -179,10 +172,8 @@ class Trainer(object):
             self.inst_lens.extend(other.inst_lens)
             self.index.extend(other.index)
 
-
-            for k in self.loss.keys() | other.loss.keys():
-                self.loss[k] += other.loss[k]
-                self.loss_sum[k] += other.loss_sum[k]
+            self.loss += other.loss
+            self.loss_sum += other.loss_sum
 
             self.mape += other.mape
             self.mape_sum += other.mape_sum
@@ -193,6 +184,21 @@ class Trainer(object):
 Loss: {self.loss}
 '''
 
+    def run_model(self, input, loss_mod=None, is_train=False):
+        x = input['x'].to(self.device)
+        output = self.model(x)
+
+        y = input['y'].to(self.device)
+        loss = self.loss_fn(output, y)
+
+        if loss_mod is not None:
+            loss *= loss_mod
+
+        if is_train:
+            loss.backward()
+
+        return loss.item(), y.tolist(), output.tolist()
+    
     def run_batch(self, batch, is_train=False):
         short, long = itemgetter('short', 'long')(batch)
 
@@ -206,53 +212,30 @@ Loss: {self.loss}
         if short_len > 0:
             loss_mod = short_len / result.batch_len if long_len > 0 else None
 
-            # short['x'] = short['x'].to(self.device)
-            # short['y'] = short['y'].to(self.device)
+            loss, new_y, new_pred = self.run_model(short, loss_mod, is_train)
+            result.measured.extend(new_y)
+            result.prediction.extend(new_pred)
 
-            if self.is_bert:
-                loss, correct, total = self.model.run(short, None, is_train)
-                result.mape = correct
-                result.batch_len = total
-                for k in loss:
-                    result.loss[k] += loss[k]
-            else:
-                loss, new_y, new_pred = self.model.run(short, loss_mod, is_train)
-                # loss, new_y, new_pred = self.model.run(short_x, short_y, loss_mod, is_train)
-                result.measured.extend(new_y)
-                result.prediction.extend(new_pred)
-
-                mape_score = mape_batch(new_pred, new_y)
-                if loss_mod is not None:
-                    mape_score *= loss_mod
-                result.mape += mape_score
-                for k in loss:
-                    result.loss[k] += loss[k]
+            mape_score = mape_batch(new_pred, new_y)
+            if loss_mod is not None:
+                mape_score *= loss_mod
+            result.mape += mape_score
+            
+            result.loss += loss
         
         if long_len > 0:
             for long_item in long:
-                # long_item['x'] = long_item['x'].to(self.device)
-                # long_item['y'] = long_item['y'].to(self.device)
+                loss, new_y, new_pred = self.run_model(long_item, 1/result.batch_len, is_train)
+                result.measured.extend(new_y)
+                result.prediction.extend(new_pred)
+                mape_score = mape_batch(new_pred, new_y)
+                mape_score /= result.batch_len
 
-                if self.is_bert:
-                    loss, correct, total = self.model.run(long_item, None, is_train)
-                    result.mape += correct
-                    result.batch_len += total
-                    for k in loss:
-                        result.loss[k] += loss[k]
-                else:
-                    loss, new_y, new_pred = self.model.run(long_item, 1/result.batch_len, is_train)
-                    result.measured.extend(new_y)
-                    result.prediction.extend(new_pred)
-                    mape_score = mape_batch(new_pred, new_y)
-                    mape_score /= result.batch_len
-
-                    result.mape += mape_score
-                    for k in loss:
-                        result.loss[k] += loss[k]
+                result.mape += mape_score
+                result.loss += loss
+                
         
-        for k in result.loss:
-            result.loss_sum[k] = result.loss[k] * result.batch_len
-        
+        result.loss_sum = result.loss * result.batch_len
         result.mape_sum = result.mape * result.batch_len
         return result
     
@@ -271,37 +254,29 @@ Loss: {self.loss}
             for batch in tqdm(loader):
                 epoch_result += self.run_batch(batch, is_train=False)
         
-        if self.is_bert:
-            for k in epoch_result.loss:
-                epoch_result.loss[k] = epoch_result.loss_sum[k] / epoch_result.batch_len 
-            correct = epoch_result.mape / epoch_result.batch_len
-        else:
-            for k in epoch_result.loss:
-                epoch_result.loss[k] = epoch_result.loss_sum[k] / epoch_result.batch_len 
-            epoch_result.mape = epoch_result.mape_sum / epoch_result.batch_len
-            correct = correct_regression(epoch_result.prediction, epoch_result.measured, 25)
+    
+        epoch_result.loss = epoch_result.loss_sum / epoch_result.batch_len
+        epoch_result.mape = epoch_result.mape_sum / epoch_result.batch_len
+        correct = correct_regression(epoch_result.prediction, epoch_result.measured, 25)
         f.write(f'loss - {epoch_result.loss}\n')
         f.write(f'{correct}, {epoch_result.batch_len}\n')
         f.close()
 
 
-        print(f'{"Test" if is_test else "Validate"}: loss - {epoch_result.loss["loss"]}\n\t{correct}/{epoch_result.batch_len} = {correct / epoch_result.batch_len}\n')
+        print(f'{"Test" if is_test else "Validate"}: loss - {epoch_result.loss}\n\t{correct}/{epoch_result.batch_len} = {correct / epoch_result.batch_len}\n')
         print()
 
         if is_test:
             wandb_log.wandb_log_test(epoch_result)
         else:
-            wandb_log.wandb_log_val(epoch_result, epoch, is_bert=self.is_bert)
+            wandb_log.wandb_log_val(epoch_result, epoch)
 
         return epoch_result.mape, correct
 
     def train(self):
         """ Train Loop """
 
-        if self.is_bert:
-            best_mape = -1
-        else:
-            best_accr = -1
+        best_accr = -1
         generator = get_worker_generator(self.seed)
         resultfile = os.path.join(self.expt.experiment_root_path(), 'validation_results.txt')
 
@@ -337,22 +312,18 @@ Loss: {self.loss}
                 
 
                 wandb_log.wandb_log_train(batch_result, self.lr_scheduler.get_last_lr()[0], 
-                            epoch=epoch_no + idx/epoch_len, is_bert=self.is_bert)
+                            epoch=epoch_no + idx/epoch_len)
 
 
                 step += 1 
             
-                epoch_loss_sum += batch_result.loss_sum['loss']
+                epoch_loss_sum += batch_result.loss_sum
                 total_cnts += batch_result.batch_len
 
-                if self.is_bert:
-                    report_batch_len = len(batch['short']['y']) + len(batch['long'])
-                    total_correct += batch_result.mape
-                else:
-                    report_batch_len = batch_result.batch_len
-                    total_correct += correct_regression(batch_result.prediction, batch_result.measured, 25)
+                report_batch_len = batch_result.batch_len
+                total_correct += correct_regression(batch_result.prediction, batch_result.measured, 25)
                 self.loss_reporter.report(report_batch_len, 
-                                    batch_result.loss['loss'], epoch_loss_sum/step, total_correct/total_cnts)   
+                                    batch_result.loss, epoch_loss_sum/step, total_correct/total_cnts)   
 
                 if self.cfg.train.use_batch_step_lr:
                     self.lr_scheduler.step()
@@ -363,20 +334,13 @@ Loss: {self.loss}
 
             cur_mape, correct = self.validate(resultfile, epoch_no + 1)
 
-            if self.is_bert:
-                if cur_mape >= best_mape:
-                    best_mape = cur_mape
-                    self.loss_reporter.save_best(self.model, self.optimizer, self.lr_scheduler)
-            else:
-                if correct >= best_accr:
-                    best_accr = correct
-                    self.loss_reporter.save_best(self.model, self.optimizer, self.lr_scheduler)
+     
+            if correct >= best_accr:
+                best_accr = correct
+                self.loss_reporter.save_best(self.model, self.optimizer, self.lr_scheduler)
 
             if not self.cfg.train.use_batch_step_lr:
                 self.lr_scheduler.step()
-
-            if getattr(self.train_ds, 'update', None) is not None:
-                self.train_ds.update(epoch_no)
 
         if len(self.test_ds) > 0:
             self.validate(resultfile, epoch_no + 1, is_test=True)
