@@ -142,8 +142,6 @@ class Op(nn.Module):
         x: [batch_size, inst_size, seq_size, dim]
         op_seq_mask: [batch_size, inst_size]
         """
-        batch_size, inst_size, _ = x.shape
-
         x = self.tr(x, src_key_padding_mask=op_seq_mask)
         x = x.masked_fill(op_seq_mask.unsqueeze(-1), 0)
         return x
@@ -153,8 +151,6 @@ class Op(nn.Module):
         x: [batch_size, inst_size, seq_size, dim]
         op_seq_mask: [batch_size, inst_size]
         """
-        batch_size, inst_size, _ = x.shape
-
         for idx in range(len(self.tr.layers)):
             x = checkpoint(method_dummy_wrapper(self.tr.layers[idx]), self.dummy, x, None, op_seq_mask)
 

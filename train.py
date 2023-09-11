@@ -288,7 +288,6 @@ Loss: {self.loss}
                         worker_init_fn=seed_worker, generator=generator) 
         epoch_len = len(loader)
 
-        # with autograd.detect_anomaly(True):
         for epoch_no in range(self.cfg.train.n_epochs):
             epoch_loss_sum = 0.
             step = 0
@@ -327,14 +326,14 @@ Loss: {self.loss}
 
                 if self.cfg.train.use_batch_step_lr:
                     self.lr_scheduler.step()
-              
+            
             epoch_loss_avg = epoch_loss_sum / step
             self.loss_reporter.end_epoch(self.model,self.optimizer, self.lr_scheduler, epoch_loss_avg)
 
 
             cur_mape, correct = self.validate(resultfile, epoch_no + 1)
 
-     
+    
             if correct >= best_accr:
                 best_accr = correct
                 self.loss_reporter.save_best(self.model, self.optimizer, self.lr_scheduler)
