@@ -301,7 +301,6 @@ Loss: {self.loss}
             for idx, batch in enumerate(loader):
                 if self.small_training and idx > 100:
                     break
-                
                 batch_result = self.run_batch(batch, is_train=True)
 
                 if not self.cfg.train.gradient_accumlation.using or (idx + 1) % self.cfg.train.gradient_accumlation.steps == 0:

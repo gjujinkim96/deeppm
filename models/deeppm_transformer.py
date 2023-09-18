@@ -3,16 +3,45 @@ import torch.nn as nn
 import torch.nn.functional as F
     
 class DeepPMTransformerEncoderLayer(nn.Module):
-    def __init__(self, dim, n_heads, dim_ff=2048):
+    def __init__(self, dim, n_heads, dim_ff=2048, use_layernorm=False, layer_norm_eps=1e-05, dropout=None,
+                use_weighted_attn=True, is_continue_padding=True):
         super().__init__()
 
+        self.use_weighted_attn = use_weighted_attn
+        self.is_continue_padding = is_continue_padding
         self.attn = nn.MultiheadAttention(dim, n_heads, batch_first=True)
         self.proj = nn.Linear(dim, dim)
+
         self.pwff = nn.Sequential(
             nn.Linear(dim, dim_ff),
             nn.GELU(),
             nn.Linear(dim_ff, dim)
         )
+
+        if dropout is not None:
+            self.use_dropout = True
+            self.dropout = nn.Dropout(dropout)
+
+            self.pwff = nn.Sequential(
+                nn.Linear(dim, dim_ff),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(dim_ff, dim),
+                nn.Dropout(dropout)
+            )
+            
+        else:
+            self.use_dropout = False
+            self.pwff = nn.Sequential(
+                nn.Linear(dim, dim_ff),
+                nn.GELU(),
+                nn.Linear(dim_ff, dim)
+            )
+
+        self.use_layernorm = use_layernorm
+        if self.use_layernorm:
+            self.norm1 = nn.LayerNorm(dim, eps=layer_norm_eps)
+            self.norm2 = nn.LayerNorm(dim, eps=layer_norm_eps)
 
     def make_attn_mask(self, mask):
         '''
@@ -21,29 +50,37 @@ class DeepPMTransformerEncoderLayer(nn.Module):
         '''
 
         sizes = (~mask).sum(dim=1)
-        # Create a list to store the masking matrices
-        masking_matrices = []
+        maximum_size = mask.size(1)
 
-        # Loop through each size
-        for s in sizes:
-            masking = torch.full((max(sizes), max(sizes)), -float('inf'), device=mask.device)
+        # Initialize the masking tensor with -inf values
+        all_masking = []
+
+        # Loop through each row of the mask
+        for idx, s in enumerate(sizes):
+            cur_mask = ~mask[idx]
             
-            # Calculate the values based on your condition
             i, j = torch.meshgrid(
                 torch.arange(s, device=mask.device), torch.arange(s, device=mask.device), indexing='ij'
             )
-            masking[:s, :s] = torch.where(i < j, (s + i - j) / s, (s - i + j) / s)
+
+            if self.is_continue_padding:
+                masking = F.pad((s - abs(i - j)) / s, (0, maximum_size-s, 0, maximum_size-s), value=-float('inf'))
+            else:
+                tmp = torch.full((maximum_size, maximum_size), -float('inf'), device=mask.device)
+                tmp[cur_mask] = F.pad((s - abs(i - j)) / s, (0, maximum_size-s), value=-float('inf'))
             
-            # Append the masking matrix to the list
-            masking_matrices.append(masking)
+            
+                masking = torch.full((maximum_size, maximum_size), -float('inf'), device=mask.device)
+                masking[:, cur_mask] = tmp[:, :s]
+            all_masking.append(masking)
 
-        # Stack the list of masking matrices to create a tensor
-        masking_tensor = torch.stack(masking_matrices, dim=0)
-        return masking_tensor
+        all_masking = torch.stack(all_masking)
 
-    def forward(self, src, src_key_padding_mask, use_weighted_attn):
+        return all_masking
+
+    def forward(self, src, src_key_padding_mask):
         x = src
-        if use_weighted_attn:
+        if self.use_weighted_attn:
             attn_mask = self.make_attn_mask(src_key_padding_mask)
             neg_inf_mask = attn_mask == -float('inf')
             all_neg_inf = neg_inf_mask.all(dim=-1)
@@ -56,11 +93,17 @@ class DeepPMTransformerEncoderLayer(nn.Module):
                            attn_mask=attn_mask,
                            key_padding_mask=src_key_padding_mask,
                            need_weights=False)[0]
+        if self.use_dropout:
+            h = self.dropout(h)
 
-        h = x + self.proj(h)
-        h = h + self.pwff(h)
+        if self.use_layernorm:
+            h = self.norm1(x + self.proj(h))
+            h = self.norm2(h + self.pwff(h))
+        else:
+            h = x + self.proj(h)
+            h = h + self.pwff(h)
 
-        if use_weighted_attn:
+        if self.use_weighted_attn:
             h = h.masked_fill(all_neg_inf.unsqueeze(-1), 0)
 
         return h

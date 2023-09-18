@@ -61,8 +61,8 @@ def wandb_log_val(er, epoch):
 
     df['mape'] = abs(df.predicted - df.measured) * 100 / (df.measured + 1e-5)
     df['correct'] = df.mape < 25
-    inst_len_mean = df.groupby('inst_lens').mape.mean()
-    inst_len_correct = df.groupby('inst_lens').correct.mean()
+    inst_len_mean = df.groupby('inst_lens', observed=False).mape.mean()
+    inst_len_correct = df.groupby('inst_lens', observed=False).correct.mean()
 
     logging_dict = {
         "loss/Validation": er.loss,
@@ -76,7 +76,7 @@ def wandb_log_val(er, epoch):
 
 
     df['cat'] = pd.Categorical(df.inst_lens.apply(cat_by_inst), ordered=True, categories=cat_names)
-    cat_mape_mean = df.groupby('cat').mape.mean()
+    cat_mape_mean = df.groupby('cat', observed=False).mape.mean()
     for cat_name in cat_names:
         logging_dict[f'val/cat/MAPE Error {cat_name}'] = cat_mape_mean[cat_name]
 
@@ -87,12 +87,12 @@ def wandb_log_val(er, epoch):
     thresholds = [25]
     for threshold in thresholds:
         df[f't_{threshold}'] = df.mape < threshold
-        cat_correct = df.groupby('cat')[f't_{threshold}'].mean()
+        cat_correct = df.groupby('cat', observed=False)[f't_{threshold}'].mean()
         for cat_name in cat_names:
             logging_dict[f'val/correct/threshold_{threshold}/{cat_name}'] = cat_correct[cat_name]
     
     df['t_25'] = df.mape < 25
-    cat_correct = df.groupby('cat')['t_25'].mean()
+    cat_correct = df.groupby('cat', observed=False)['t_25'].mean()
     for cat_name in cat_names:
         logging_dict[f'val/correct/threshold_25/{cat_name}'] = cat_correct[cat_name]
 
@@ -189,7 +189,7 @@ def wandb_log_test(er):
 
 
     df['cat'] = pd.Categorical(df.inst_lens.apply(cat_by_inst), ordered=True, categories=cat_names)
-    cat_mape_mean = df.groupby('cat').mape.mean()
+    cat_mape_mean = df.groupby('cat', observed=False).mape.mean()
     for cat_name in cat_names:
         wandb.run.summary[f'test/cat/MAPE Error {cat_name}'] = cat_mape_mean[cat_name]
 
@@ -198,7 +198,7 @@ def wandb_log_test(er):
     logging_dict["test/summary/mean error"] = wandb.plot.bar(mape_table, "Number of Instructions", 'Mean MAPE Error', title="Mean Error Over Size")
 
     df['t_25'] = df.mape < threshold
-    cat_correct = df.groupby('cat')['t_25'].mean()
+    cat_correct = df.groupby('cat', observed=False)['t_25'].mean()
     for cat_name in cat_names:
         wandb.run.summary[f'test/correct/threshold_25/{cat_name}'] = cat_correct[cat_name]
 

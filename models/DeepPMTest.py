@@ -8,7 +8,7 @@ from torch.utils.checkpoint import checkpoint
 from utils import get_device
 from .checkpoint_utils import method_dummy_wrapper
 
-class DeepPM(nn.Module):
+class DeepPMTest(nn.Module):
     """DeepPM model with Trasformer """
     def __init__(self, dim=512, n_heads=8, dim_ff=2048, 
                 pad_idx=0, vocab_size=700,
@@ -30,21 +30,21 @@ class DeepPM(nn.Module):
 
         self.basic_block = nn.ModuleList(
             [
-                DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff, use_weighted_attn=False) 
+                DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff, use_layernorm=True, use_weighted_attn=False)
                     for _ in range(self.num_basic_block_layer)
             ]
         )
 
         self.instruction_block = nn.ModuleList(
             [
-                DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff, use_weighted_attn=False) 
+                DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff, use_layernorm=True, use_weighted_attn=False)
                     for _ in range(self.num_instruction_layer)
             ]
         )
 
         self.op_block = nn.ModuleList(
             [
-                DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff, use_weighted_attn=True) 
+                DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff, use_layernorm=True, use_weighted_attn=True) 
                     for _ in range(self.num_op_layer)
             ]
         )
