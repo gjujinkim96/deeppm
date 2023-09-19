@@ -49,8 +49,8 @@ class Data(object):
             self.test = [datum_mapping[idx] for idx in given_train_val_test_idx['test'] if idx in datum_mapping]
 
             if small_size and len(self.val) == 0:
-                self.train = self.train[:-1]
-                self.val = [self.train[-1]]
+                self.train = self.train[:-2]
+                self.val = self.train[-2:]
             return 
         
         def get_train_val(size, train, val):

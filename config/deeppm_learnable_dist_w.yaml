@@ -1,5 +1,5 @@
 model:
-  model_class: DeepPM
+  model_class: DeepPMLearnableDistW
   model_setting:
     dim: 512
     n_heads: 8
@@ -10,6 +10,7 @@ model:
     num_op_layer: 4
     pad_idx: from:data.special_token_idx.PAD
     use_checkpoint: true
+    dist_weight_len_limit: 40
 train:
   seed: 3431
   batch_size: 16
@@ -36,16 +37,17 @@ data:
     train_perc: 8
     val_perc: 2
     test_perc: 0
+    # prepare_mode: stacked
     prepare_mode: stacked_raw
     shuffle: true
     instr_limit: 400
     custom_idx_split: model_resources/data/idx_dict.dump
     given_token_mapping: model_resources/data/data_mapping.dump
     # given_token_mapping: null
-  dataset_class: DatasetWithDistanceWeight
+  dataset_class: StackedBlockDatasetWithDistanceWeight
   dataset_setting:
-    return_raw_dist_weight: false
     too_long_limit: 512
+    dist_weight_len_limit: 40
   special_token_idx:
     PAD: 0
     BLOCK_START: 1

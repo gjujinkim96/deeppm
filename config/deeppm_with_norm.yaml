@@ -1,5 +1,5 @@
 model:
-  model_class: DeepPMTest
+  model_class: DeepPMWithNorm
   model_setting:
     dim: 512
     n_heads: 8
