@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 from .pos_encoder import get_positional_encoding_2d
-from .base_blocks import Seq, Op, BasicBlock
+from .base_blocks import BasicBlock
 
 class TransformerOnly(nn.Module):
     def __init__(self,

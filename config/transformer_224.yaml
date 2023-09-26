@@ -1,9 +1,10 @@
 model:
-  model_class: DeepPMWithNorm
+  model_class: PadZeroCheckpoint
   model_setting:
     dim: 512
     n_heads: 8
     dim_ff: 2048
+    pred_drop: 0.1
     vocab_size: 700
     num_basic_block_layer: 2
     num_instruction_layer: 2
@@ -36,13 +37,11 @@ data:
     train_perc: 8
     val_perc: 2
     test_perc: 0
-    # prepare_mode: stacked
     prepare_mode: stacked_raw
     shuffle: true
     instr_limit: 400
     custom_idx_split: model_resources/data/idx_dict.dump
     given_token_mapping: model_resources/data/data_mapping.dump
-    # given_token_mapping: null
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512

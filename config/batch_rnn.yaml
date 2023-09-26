@@ -35,11 +35,11 @@ data:
     train_perc: 8
     val_perc: 2
     test_perc: 0
-    prepare_mode: stacked
+    prepare_mode: stacked_raw
     shuffle: true
     instr_limit: 400
     custom_idx_split: model_resources/data/idx_dict.dump
-    given_token_mapping: null
+    given_token_mapping: model_resources/data/data_mapping.dump
   dataset_class: StackedBlockDataset
   dataset_setting:
     too_long_limit: 512

@@ -42,6 +42,8 @@ def make_attention_weight_raw(mask, length_limit=40, offset_by_zero_idx=True, is
     if offset_by_zero_idx:
         all_masking += length_limit
     return all_masking, sizes
+
+0 
    
 def make_attention_weight(mask, is_continual_pad=True):
     sizes = (~mask).sum(dim=1)

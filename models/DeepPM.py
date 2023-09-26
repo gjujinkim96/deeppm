@@ -2,11 +2,8 @@ import torch
 import torch.nn as nn
 
 from .pos_encoder import get_positional_encoding_1d
-from .deeppm_transformer import DeepPMTransformerEncoderLayer
-
-from torch.utils.checkpoint import checkpoint
+from .deeppm_basic_blocks import DeepPMBasicBlock, DeepPMSeq, DeepPMOp
 from utils import get_device
-from .checkpoint_utils import method_dummy_wrapper
 
 class DeepPM(nn.Module):
     """DeepPM model with Trasformer """
@@ -14,8 +11,16 @@ class DeepPM(nn.Module):
                 pad_idx=0, vocab_size=700,
                 num_basic_block_layer=2,
                 num_instruction_layer=2,
-                num_op_layer=4, use_checkpoint=False):
+                num_op_layer=4, use_checkpoint=False, use_layernorm=False,
+                use_bb_attn=True, use_seq_attn=True, use_op_attn=True):
         super().__init__()
+
+        self.use_checkpoint = use_checkpoint
+        if self.use_checkpoint:
+            device = get_device(should_print=False)
+            self.dummy = torch.zeros(1, requires_grad=True, device=device)
+        else:
+            self.dummy = None
 
         self.pos_embed = get_positional_encoding_1d(dim)
 
@@ -24,88 +29,23 @@ class DeepPM(nn.Module):
         self.embed = nn.Embedding(vocab_size, dim, self.pad_idx)
 
 
-        self.num_basic_block_layer = num_basic_block_layer
-        self.num_instruction_layer = num_instruction_layer
-        self.num_op_layer = num_op_layer
-
-        self.basic_block = nn.ModuleList(
-            [
-                DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff) 
-                    for _ in range(self.num_basic_block_layer)
-            ]
-        )
-
-        self.instruction_block = nn.ModuleList(
-            [
-                DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff) 
-                    for _ in range(self.num_instruction_layer)
-            ]
-        )
-
-        self.op_block = nn.ModuleList(
-            [
-                DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff) 
-                    for _ in range(self.num_op_layer)
-            ]
-        )
+        self.basic_block = DeepPMBasicBlock(dim, dim_ff, n_heads, num_basic_block_layer, use_layernorm=use_layernorm,
+                            use_checkpoint=use_checkpoint, dummy=self.dummy)
+        self.instruction_block = DeepPMSeq(dim, dim_ff, n_heads, num_instruction_layer, use_layernorm=use_layernorm,
+                            use_checkpoint=use_checkpoint, dummy=self.dummy)
+        self.op_block = DeepPMOp(dim, dim_ff, n_heads, num_op_layer, use_layernorm=use_layernorm,
+                            use_checkpoint=use_checkpoint, dummy=self.dummy)
 
         self.prediction = nn.Linear(dim, 1)
 
-        self.use_checkpoint = use_checkpoint
-        if self.use_checkpoint:
-            device = get_device(should_print=False)
-            self.dummy = torch.zeros(1, requires_grad=True, device=device)
-
-    def _basic_block(self, x, mask, attn_mod):
-        batch_size, inst_size, seq_size, _ = x.shape
-        x = x.view(batch_size, inst_size * seq_size, -1)
-        mask = mask.view(batch_size, inst_size * seq_size)
-
-        for block in self.basic_block:
-            if self.use_checkpoint:
-                x = checkpoint(method_dummy_wrapper(block), self.dummy, x, mask, attn_mod)
-            else:
-                x = block(x, mask, attn_mod)
-        
-        x = x.masked_fill(mask.unsqueeze(-1), 0)
-        x = x.view(batch_size, inst_size, seq_size, -1)
-        return x
-    
-    def _instruction_block(self, x, mask, op_seq_mask, attn_mod):
-        batch_size, inst_size, seq_size, _ = x.shape
-
-        x = x.view(batch_size * inst_size, seq_size, -1)
-        mask = mask.view(batch_size * inst_size, seq_size)
-        op_seq_mask = op_seq_mask.view(batch_size * inst_size)
-
-        x = x.masked_fill(op_seq_mask.unsqueeze(-1).unsqueeze(-1), 1)
-        mod_mask = mask.masked_fill(op_seq_mask.unsqueeze(-1), False)
-
-        for block in self.instruction_block:
-            if self.use_checkpoint:
-                x = checkpoint(method_dummy_wrapper(block), self.dummy, x, mod_mask, attn_mod)
-            else:
-                x = block(x, mod_mask, attn_mod)
-                
-        x = x.masked_fill(mask.unsqueeze(-1), 0)
-        x = x.view(batch_size, inst_size, seq_size, -1)
-        return x
-    
-    def _op_block(self, x, op_seq_mask, attn_mod):
-        for block in self.op_block:
-            if self.use_checkpoint:
-                x = checkpoint(method_dummy_wrapper(block), self.dummy, x, op_seq_mask, attn_mod)
-            else:
-                x = block(x, op_seq_mask, attn_mod)
-                
-
-        x = x.masked_fill(op_seq_mask.unsqueeze(-1), 0)
-        return x
+        self.use_bb_attn = use_bb_attn
+        self.use_seq_attn = use_seq_attn
+        self.use_op_attn = use_op_attn
        
     def forward(self, x):
-        bb_attn_mod = x['bb_attn_mod']
-        seq_attn_mod = x['seq_attn_mod']
-        op_attn_mod = x['op_attn_mod']
+        bb_attn_mod = x['bb_attn_mod'] if self.use_bb_attn else None
+        seq_attn_mod = x['seq_attn_mod'] if self.use_seq_attn else None
+        op_attn_mod = x['op_attn_mod'] if self.use_op_attn else None
         x = x['x']
 
         # B I S
@@ -122,15 +62,16 @@ class DeepPM(nn.Module):
 
         #  B I S D
         output = output.view(batch_size, inst_size, seq_size, -1)
-        output = self._basic_block(output, mask, bb_attn_mod)
-        output = self._instruction_block(output, mask, op_seq_mask, seq_attn_mod)
+
+        output = self.basic_block(output, mask, bb_attn_mod)
+        output = self.instruction_block(output, mask, op_seq_mask, seq_attn_mod)
 
         # reduce
         # B I H
         output = output[:, :, 0]
         output = self.pos_embed(output)
 
-        output = self._op_block(output, op_seq_mask, op_attn_mod)
+        output = self.op_block(output, op_seq_mask, op_attn_mod)
 
         #  B I
         output = output.sum(dim=1)

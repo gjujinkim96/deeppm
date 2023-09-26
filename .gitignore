@@ -223,3 +223,4 @@ graph
 model_result
 results
 student_bert
+model_resources/bert/bert_weights.pth

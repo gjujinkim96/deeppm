@@ -15,6 +15,8 @@ import multiprocessing
 from operator import itemgetter
 from utils import correct_regression, seed_worker, get_worker_generator, mape_batch
 
+import sys
+
 
 class LossReporter(object):
     def __init__(self, experiment, n_data_points):
@@ -299,7 +301,7 @@ Loss: {self.loss}
             self.model.train()
             
             for idx, batch in enumerate(loader):
-                if self.small_training and idx > 100:
+                if self.small_training and idx > 10:
                     break
                 batch_result = self.run_batch(batch, is_train=True)
 

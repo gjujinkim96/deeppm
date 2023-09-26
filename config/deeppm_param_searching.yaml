@@ -1,10 +1,9 @@
 model:
-  model_class: PadZeroCheckpoint
+  model_class: DeepPM
   model_setting:
     dim: 512
     n_heads: 8
     dim_ff: 2048
-    pred_drop: 0.1
     vocab_size: 700
     num_basic_block_layer: 2
     num_instruction_layer: 2
@@ -17,10 +16,10 @@ train:
   val_batch_size: 16
   n_epochs: 30
   clip_grad_norm: 0.2
-  optimizer: Adam
+  optimizer: SGD
   optimizer_setting:
-    lr: 0.00001
-    betas: !!python/tuple [0.99, 0.999]
+    lr: 0.05
+    momentum: 0.9
   lr_scheduler: LinearLR
   use_batch_step_lr: false
   lr_scheduler_setting:
@@ -30,8 +29,6 @@ train:
     steps: 4
   loss: MapeLoss
   # loss_setting:
-
-
 data:
   data_file: training_data/intel_core.data
   data_setting:
@@ -45,8 +42,10 @@ data:
     instr_limit: 400
     custom_idx_split: model_resources/data/idx_dict.dump
     given_token_mapping: model_resources/data/data_mapping.dump
-  dataset_class: StackedBlockDataset
+    # given_token_mapping: null
+  dataset_class: DatasetWithDistanceWeight
   dataset_setting:
+    return_raw_dist_weight: false
     too_long_limit: 512
   special_token_idx:
     PAD: 0
