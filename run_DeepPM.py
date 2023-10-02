@@ -7,7 +7,7 @@ import wandb_log
 
 from utils import set_seeds, get_device, recursive_vars
 from DeepPM_utils import *
-from experiments.experiment import Experiment
+from experiment import Experiment
 import losses 
 
 import torch
@@ -18,6 +18,7 @@ import lr_schedulers as lr_sch
 import losses as ls
 from pathlib import Path
 
+from dumper import Dumper
 
 
 def main():
@@ -26,11 +27,10 @@ def main():
     
     set_seeds(cfg.train.seed)
     
-    expt = Experiment(args.exp_name)
-    if expt.check_root_exist() and not args.exp_override:
-        print(f'{expt.experiment_root_path()} exist.')
-        return 
-    
+    expt = Experiment(args.exp_name, exp_override=args.exp_override)
+    expt.restart()
+    dumper = Dumper(expt)
+
     dm = idx_dict = None
     if getattr(cfg, 'pretrained', None) is not None:
         model_root = Path(cfg.pretrained.saved_path)
@@ -120,11 +120,11 @@ def main():
     if getattr(cfg, 'pretrained', None) is not None:
         cfg.pretrained.model = pretrained
     
-    dump_obj_to_root(expt, data.dump_dataset_params(), 'data_mapping.dump')
-    dump_obj_to_root(expt, cfg, 'config.dump')
-    dump_idx_to_root(expt, data)
+    dumper.dump_data_mapping(data.dump_dataset_params())
+    dumper.dump_config(cfg)
+    dumper.dump_idx_dict(data)
 
-    trainer = train.Trainer(cfg, model, (train_ds, val_ds, test_ds), expt, 
+    trainer = train.Trainer(cfg, model, (train_ds, val_ds, test_ds), dumper, 
                             optimizer, lr_scheduler, loss_fn, device, args.small_training)
 
     # with torch.autograd.detect_anomaly():

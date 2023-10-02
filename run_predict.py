@@ -6,7 +6,7 @@ from data import load_data_from_cfg
 from models import load_model_from_cfg
 from torch.utils.data import DataLoader
 import dataset as ds
-import multiprocessing
+# import multiprocessing
 from train import Trainer
 from operator import itemgetter
 from utils import correct_regression, mape_batch
@@ -73,7 +73,8 @@ train_ds, val_ds, test_ds = ds.load_dataset_from_cfg(data, cfg, show=True)
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-cpu_count = multiprocessing.cpu_count()
+# cpu_count = multiprocessing.cpu_count()
+cpu_count = 0
 
 model.eval()
 model.to(device)
@@ -81,7 +82,9 @@ model.to(device)
 loader = DataLoader(val_ds, shuffle=False, num_workers=cpu_count,
     batch_size=cfg.train.val_batch_size, collate_fn=val_ds.collate_fn)
 
+
 epoch_result = Trainer.BatchResult()
+
 
 with torch.no_grad():
     for batch in tqdm(loader):
@@ -97,10 +100,14 @@ with torch.no_grad():
         if short_len > 0:
             loss_mod = short_len / result.batch_len if long_len > 0 else None
 
-            short['x'] = short['x'].to(device)
-            short['y'] = short['y'].to(device)
+            x = short['x'].to(device)
+            output = model(x)
 
-            loss, new_y, new_pred = model.run(short, loss_mod, False)
+            y = short['y'].to(device)
+            
+            new_y, new_pred = y.tolist(), output.tolist()
+
+
             result.measured.extend(new_y)
             result.prediction.extend(new_pred)
 
@@ -108,30 +115,29 @@ with torch.no_grad():
             if loss_mod is not None:
                 mape_score *= loss_mod
             result.mape += mape_score
-            for k in loss:
-                result.loss[k] += loss[k]
+            
         
         if long_len > 0:
             for long_item in long:
-                long_item['x'] = long_item['x'].to(device)
-                long_item['y'] = long_item['y'].to(device)
+                x = long_item['x'].to(device)
+                output = model(x)
 
-                loss, new_y, new_pred = model.run(long_item, 1/result.batch_len, False)
+                y = long_item['y'].to(device)
+                
+                new_y, new_pred = y.tolist(), output.tolist()
+
                 result.measured.extend(new_y)
                 result.prediction.extend(new_pred)
                 mape_score = mape_batch(new_pred, new_y)
                 mape_score /= result.batch_len
 
                 result.mape += mape_score
-                for k in loss:
-                    result.loss[k] += loss[k]
-        
-        for k in result.loss:
-            result.loss_sum[k] = result.loss[k] * result.batch_len
+                
         
         result.mape_sum = result.mape * result.batch_len
-        
+
         epoch_result += result
+
 
 torch.save({
     'measured': epoch_result.measured,

@@ -96,7 +96,7 @@ class DatasetWithDistanceWeight(Dataset):
         return self.total_size
     
     def __getitem__(self, index):
-        return self.xs[index], self.ys[index], self.inst_lens[index], False, index
+        return self.xs[index], self.ys[index], self.inst_lens[index], index
     
     def make_input(self, x):
         x_dict = {
@@ -151,7 +151,7 @@ class DatasetWithDistanceWeight(Dataset):
         short_index = []
         long_index = []
 
-        for x, y, inst_len, unrolled, index in batch:
+        for x, y, inst_len, index in batch:
             if x.numel() <= self.too_long_limit:
                 short_x.append(x)
                 short_y.append(y)

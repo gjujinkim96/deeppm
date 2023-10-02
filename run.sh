@@ -9,4 +9,4 @@
 # python run_DeepPM.py --cfg config/deeppm.yaml --exp_name 'Tokenizer + DeepPM' --exp_override
 
 
-python run_DeepPM.py --cfg config/deeppm_param_searching.yaml --exp_name 'Tokenizer + DeepPM Fixed(SGD)' --exp_override
+python run_DeepPM.py --cfg config/deeppm.yaml --exp_name 'Tokenizer + DeepPM(336)' --exp_override

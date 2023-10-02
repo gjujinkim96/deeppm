@@ -20,11 +20,11 @@ def dump_idx_to_root(expt, data):
 
 def dump_obj_to_root(expt, obj, name):
     try:
-        os.makedirs(expt.experiment_root_path()) 
+        os.makedirs(expt.root_dir) 
     except OSError:
         pass
 
-    torch.save(obj, os.path.join(expt.experiment_root_path(), name))
+    torch.save(obj, os.path.join(expt.root_dir, name))
 
 def load_model_and_data(fname):
     # type: (str) -> (md.AbstractGraphMode, dt.DataCost)

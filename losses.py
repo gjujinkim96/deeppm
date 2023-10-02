@@ -5,7 +5,7 @@ from utils import recursive_vars
 import importlib, inspect
 
 
-class MapeLoss(torch.nn.Module):
+class MapeLoss(nn.Module):
     def __init__(self):
         super().__init__()
 
@@ -14,7 +14,7 @@ class MapeLoss(torch.nn.Module):
     def forward(self, output, target):
         loss = self.loss_fn(output, target) / (target + 1e-5)
         return torch.mean(loss)
-
+    
 class_dict = {}
 module = importlib.import_module('torch.nn', package='torch')
 for name, cls in inspect.getmembers(module, inspect.isclass):

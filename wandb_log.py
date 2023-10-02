@@ -64,9 +64,11 @@ def wandb_log_val(er, epoch):
     inst_len_mean = df.groupby('inst_lens', observed=False).mape.mean()
     inst_len_correct = df.groupby('inst_lens', observed=False).correct.mean()
 
+    er_mape = df.mape.mean().item()
+
     logging_dict = {
         "loss/Validation": er.loss,
-        "mape/Validation": er.mape,
+        "mape/Validation": er_mape,
         'epoch': epoch,
     }
 
@@ -106,8 +108,8 @@ def wandb_log_val(er, epoch):
     global best_inst_len_mean_data
     global best_inst_len_correct_data
 
-    if er.mape < best_mape_loss:
-        best_mape_loss = er.mape
+    if er_mape < best_mape_loss:
+        best_mape_loss = er_mape
         wandb.run.summary['best_mape'] = best_mape_loss
 
     if er.loss < best_val_loss:
@@ -165,12 +167,13 @@ def wandb_log_test(er):
     })
 
     df['mape'] = abs(df.predicted - df.measured) * 100 / (df.measured + 1e-5)
+    er_mape = df.mape.mean().item()
 
     logging_dict = {
     }
 
     wandb.run.summary['test/loss'] = er.loss
-    wandb.run.summary['test/mape'] = er.mape
+    wandb.run.summary['test/mape'] = er_mape
 
     
     scatter_data = [[x, y] for (x, y) in zip(df.predicted, df.measured)]
@@ -213,10 +216,11 @@ def wandb_log_train(br, lr, epoch):
     })
 
     df['mape'] = abs(df.predicted - df.measured) * 100 / (df.measured + 1e-5)
+    br_mape = df.mape.mean().item()
 
     logging_dict = {
         "loss/Train": br.loss,
-        "mape/Train": br.mape,
+        "mape/Train": br_mape,
         "lr": lr,
         'epoch': epoch,
     }

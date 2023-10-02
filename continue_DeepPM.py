@@ -7,7 +7,7 @@ import optim
 
 from utils import set_seeds, get_device
 from DeepPM_utils import *
-from experiments.experiment import Experiment
+from experiment import Experiment
 
 def main():
     # type: () -> None

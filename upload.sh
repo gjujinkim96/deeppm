@@ -1,6 +1,6 @@
 #!/bin/zsh
 
-# scp experiments/* guest_0702@147.46.78.51:NDeepPM/DeepPM/experiments
+scp experiments/* guest_0702@147.46.78.51:NDeepPM/DeepPM/experiments
 scp data/* guest_0702@147.46.78.51:NDeepPM/DeepPM/data
 scp dataset/* guest_0702@147.46.78.51:NDeepPM/DeepPM/dataset
 scp config/* guest_0702@147.46.78.51:NDeepPM/DeepPM/config
