@@ -21,10 +21,8 @@ def load_dataset(data, dataset_type, dataset_setting={}, special_tokens={}):
         raise NotImplementedError()
     
     dataset_class = class_dict[dataset_type]
-    dataset_setting['is_training'] = True
     train_dataset = dataset_class(data.train, special_tokens=special_tokens, **dataset_setting)
 
-    dataset_setting['is_training'] = False
     val_dataset = dataset_class(data.val, special_tokens=special_tokens, **dataset_setting)
     test_dataset = dataset_class(data.test, special_tokens=special_tokens, **dataset_setting)
 

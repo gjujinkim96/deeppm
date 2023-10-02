@@ -5,21 +5,21 @@ import torch.nn.functional as F
 from .utils import pad_block
 
 class StackedBlockDataset(Dataset):
-    def __init__(self, data, special_tokens, too_long_limit=512, is_training=True):
+    def __init__(self, data, special_tokens, too_long_limit=512):
         self.pad_idx = special_tokens['PAD']
         self.too_long_limit = too_long_limit
         self.xs = [pad_block(datum.x, self.pad_idx) for datum in data]
         self.ys = [datum.y for datum in data]
         self.inst_lens = [datum.block.num_instrs() for datum in data]
         self.total_size = len(self.xs)
-        self.is_training = is_training
+        self.code_id = [datum.code_id for datum in data]
 
     def __len__(self):
         return self.total_size
     
     # TODO: change index to code_id
     def __getitem__(self, index): 
-        return self.xs[index], self.ys[index], self.inst_lens[index], index
+        return self.xs[index], self.ys[index], self.inst_lens[index], self.code_id[index]
 
     def collate_fn(self, batch):
         short_x = []

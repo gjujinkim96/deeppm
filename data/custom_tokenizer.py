@@ -43,6 +43,8 @@ class Tokenizer:
 
     @classmethod
     def normalize(cls, line):
+        """ Words are turned into tokens and numeric values are normalized.
+        """
         mod_line = line
         for replace_src, replace_dst in cls.replace_tokens.items():
             mod_line = mod_line.replace(replace_src, f' {replace_dst} ')
@@ -57,16 +59,22 @@ class Tokenizer:
 
     @classmethod
     def pretokenize(cls, norm_line):
+        """ Split lines
+        """
         return norm_line.split()
 
     @classmethod
     def postprocess(cls, tok_list, stack_first=False, stack_end=False):
+        """ Add start and end token
+        """
         start_token = cls.block_start_token if stack_first else cls.start_token
         end_token = cls.block_end_token if stack_end else cls.end_token
         return [start_token] + tok_list + [end_token]
 
     @classmethod
     def stackify(cls, tok_list):
+        """ Stack lines
+        """
         ret = []
         cur = []
         for tok in tok_list:
@@ -80,6 +88,8 @@ class Tokenizer:
         return ret
 
     def indexify(self, tok_list):
+        """ Turn tokens to numeric index.
+        """
         ret = []
         for tok in tok_list:
             if tok not in self.mapping:
@@ -88,12 +98,16 @@ class Tokenizer:
         return ret
 
     def tokenify(self, idx_list):
+        """ Turn numeric index to tokens
+        """
         if isinstance(idx_list[0], list):
             return [[self.rev_mapping[idx] for idx in line] for line in idx_list]
         else:
             return [self.rev_mapping[idx] for idx in idx_list]
 
     def stringify(self, idx_list):
+        """ Turn numeric index to readable string
+        """
         ret = self.tokenify(idx_list)
         if isinstance(idx_list[0], list):
             return '\n'.join([' '.join(line) for line in ret])
@@ -103,6 +117,8 @@ class Tokenizer:
 
     @classmethod
     def from_raw(cls, raw):
+        """ Create new tokenizer from raw data
+        """
         special_toks = [cls.pad_token, 
             cls.block_start_token, cls.block_end_token,
             cls.start_token, cls.end_token, cls.sep_token, cls.unk_token, cls.msk_token]

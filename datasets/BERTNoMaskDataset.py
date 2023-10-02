@@ -3,19 +3,20 @@ from torch.utils.data import Dataset
 import torch.nn.functional as F
 
 class BERTNoMaskDataset(Dataset):
-    def __init__(self, data, special_tokens, too_long_limit=512, is_training=True):
+    def __init__(self, data, special_tokens, too_long_limit=512):
         self.too_long_limit = too_long_limit
         self.xs = [torch.cat([torch.tensor(tmp) for tmp in datum.x]) for datum in data]
         self.data = data
         self.total_len = len(self.data)
         self.pad_idx = special_tokens['PAD']
+        self.code_id = [datum.code_id for datum in data]
 
     def __len__(self):
         return self.total_len
 
     def __getitem__(self, index):
         cur = self.data[index]
-        return self.xs[index], cur.y, cur.block.num_instrs(), index
+        return self.xs[index], cur.y, cur.block.num_instrs(), self.code_id[index]
 
     def collate_fn(self, batch):
         short_max_len = 0

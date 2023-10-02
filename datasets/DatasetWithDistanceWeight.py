@@ -41,9 +41,7 @@ def make_attention_weight_raw(mask, length_limit=40, offset_by_zero_idx=True, is
 
     if offset_by_zero_idx:
         all_masking += length_limit
-    return all_masking, sizes
-
-0 
+    return all_masking, sizes 
    
 def make_attention_weight(mask, is_continual_pad=True):
     sizes = (~mask).sum(dim=1)
@@ -76,7 +74,7 @@ def make_attention_weight(mask, is_continual_pad=True):
 
 class DatasetWithDistanceWeight(Dataset):
     def __init__(self, data, special_tokens, too_long_limit=512, dist_weight_len_limit=40, 
-                return_raw_dist_weight=False, offset_by_zero_idx=True, is_training=True,
+                return_raw_dist_weight=False, offset_by_zero_idx=True,
                 return_bb_mask=True, return_seq_mask=True, return_op_mask=True):
         self.pad_idx = special_tokens['PAD']
         self.too_long_limit = too_long_limit
@@ -84,19 +82,20 @@ class DatasetWithDistanceWeight(Dataset):
         self.ys = [datum.y for datum in data]
         self.inst_lens = [datum.block.num_instrs() for datum in data]
         self.total_size = len(self.xs)
-        self.is_training = is_training
+        
         self.dist_weight_len_limit = dist_weight_len_limit
         self.return_raw_dist_weight = return_raw_dist_weight
         self.offset_by_zero_idx = offset_by_zero_idx
         self.return_bb_mask = return_bb_mask
         self.return_seq_mask = return_seq_mask
         self.return_op_mask = return_op_mask
+        self.code_id = [datum.code_id for datum in data]
 
     def __len__(self):
         return self.total_size
     
     def __getitem__(self, index):
-        return self.xs[index], self.ys[index], self.inst_lens[index], index
+        return self.xs[index], self.ys[index], self.inst_lens[index], self.code_id[index]
     
     def make_input(self, x):
         x_dict = {
