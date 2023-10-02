@@ -5,7 +5,7 @@ from pathlib import Path
 from data import load_data_from_cfg
 from models import load_model_from_cfg
 from torch.utils.data import DataLoader
-import dataset as ds
+import datasets as ds
 # import multiprocessing
 from train import Trainer
 from operator import itemgetter

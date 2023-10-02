@@ -1,12 +1,21 @@
 import data.data_cost as dt
 from utils import recursive_vars
+import torch
 
-def load_data_from_cfg(is_small_size, cfg, given_token_mapping=None, given_train_val_test_idx=None):
-    special_tokens = getattr(cfg.data, 'special_token_idx', None)
-    if special_tokens is not None:
-        special_tokens = recursive_vars(special_tokens)
+def load_data_from_cfg(is_small_size, cfg):
+    special_tokens = recursive_vars(cfg.data.special_token_idx)
 
     data_setting = cfg.data.data_setting
+
+    if data_setting.custom_idx_split is not None:
+        idx_dict = torch.load(data_setting.custom_idx_split)
+    else:
+        idx_dict = None
+
+    if data_setting.given_token_mapping is not None:
+        given_token_mapping = torch.load(data_setting.given_token_mapping, map_location=torch.device('cpu'))[0]
+    else:
+        given_token_mapping = None
 
     data = dt.load_data(
         cfg.data.data_file, 
@@ -17,9 +26,9 @@ def load_data_from_cfg(is_small_size, cfg, given_token_mapping=None, given_train
         special_tokens=special_tokens,
         prepare_mode=getattr(data_setting, 'prepare_mode', 'stacked'),
         shuffle=getattr(data_setting, 'shuffle', False),
-        given_token_mapping=data_setting.given_token_mapping,
+        given_token_mapping=given_token_mapping,
         instr_limit=getattr(data_setting, 'instr_limit', 400),
-        given_train_val_test_idx=given_train_val_test_idx
+        given_train_val_test_idx=idx_dict
     )
 
     return data

@@ -1,11 +1,7 @@
 import collections
-import struct
-import sys
 import random
 import re
-import os
 import tempfile
-from typing import Dict, FrozenSet, Optional, Tuple, Union
 
 #dynamorio specific encoding details - tokenizing
 def get_opcode_opnd_dict(opcode_start, opnd_start):

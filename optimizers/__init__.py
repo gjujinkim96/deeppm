@@ -1,12 +1,12 @@
-import importlib, inspect
 from utils import recursive_vars
 
-    
-class_dict = {}
-module = importlib.import_module('torch.optim', package='torch')
-for name, cls in inspect.getmembers(module, inspect.isclass):
-    class_dict[name] = cls
+from class_dict_builder import make_class_dict
 
+# class dict build proces
+existing_modules = [('torch.optim', 'torch')]
+class_dict = make_class_dict(
+    existing_modules=existing_modules,
+)
 
 def load_optimizer_from_cfg(model, cfg):
     optimizer_setting = recursive_vars(getattr(cfg.train, 'optimizer_setting', {}))

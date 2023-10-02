@@ -1,19 +1,10 @@
-import numpy as np
-import random
-import torch.nn as nn
-import torch.autograd as autograd
-import torch.optim as optim
 import torch
-import torch.nn.functional as F
+
 from tqdm.auto import tqdm
 from .data import Data
-import matplotlib.pyplot as plt
-import statistics
-import pandas as pd
 import xml.etree.ElementTree as ET
 import itertools
 
-import os
 import sys
 sys.path.append('..')
 
@@ -259,12 +250,7 @@ def load_data(data_savefile, small_size=False, only_unique=False,
     split_mode: num_instrs, none
     prepare_mode: stacked, stacked_raw
     '''
-    if given_token_mapping is not None:
-        hot_idx = torch.load(given_token_mapping, map_location=torch.device('cpu'))[0]
-    else:
-        hot_idx = None
-
-    data = DataInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=hot_idx)
+    data = DataInstructionEmbedding(special_tokens=special_tokens, given_token_mapping=given_token_mapping)
 
     if small_size:
         data.raw_data = torch.load(data_savefile)[:100]
@@ -275,8 +261,8 @@ def load_data(data_savefile, small_size=False, only_unique=False,
     if prepare_mode == 'stacked':
         data.prepare_stacked_data(instr_limit=instr_limit)
     elif prepare_mode == 'stacked_raw':
-        if hot_idx is not None:
-            data.set_tokenizer(hot_idx)
+        if given_token_mapping is not None:
+            data.set_tokenizer(given_token_mapping)
         data.prepare_stacked_raw(instr_limit=instr_limit)
     else:
         raise NotImplementedError()

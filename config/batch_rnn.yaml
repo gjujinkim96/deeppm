@@ -6,7 +6,6 @@ model:
     num_layers: 2
     vocab_size: 700
     pad_idx: from:data.special_token_idx.PAD
-
 train:
   seed: 3431
   batch_size: 4
@@ -27,6 +26,13 @@ train:
     steps: 4
   loss: MapeLoss
   # loss_setting:
+  save_epoch: -1
+    # x == 0: no save
+    # x == -1: just save best and last epoch
+    # x > 0: save every `x`th epoch and also best and last
+  cpu_count: null
+    # x == null: use multiprocessing.cpu_count
+    # x == number: use that value
 data:
   data_file: training_data/intel_core.data
   data_setting:

@@ -28,7 +28,7 @@ train:
     steps: 4
   loss: MapeLoss
   # loss_setting:
-  save_epoch: 5 
+  save_epoch: -1
     # x == 0: no save
     # x == -1: just save best and last epoch
     # x > 0: save every `x`th epoch and also best and last

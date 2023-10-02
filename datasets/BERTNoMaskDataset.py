@@ -2,8 +2,6 @@ import torch
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 
-from .utils import pad_block
-
 class BERTNoMaskDataset(Dataset):
     def __init__(self, data, special_tokens, too_long_limit=512, is_training=True):
         self.too_long_limit = too_long_limit

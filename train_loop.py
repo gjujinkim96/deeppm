@@ -1,21 +1,12 @@
-# Copyright 2018 Dong-Hyun Lee, Kakao Brain.
-
-""" Training Config & Helper Classes  """
-
-import os
-from typing import NamedTuple
 from tqdm.auto import tqdm
 
 import torch
 import torch.autograd as autograd
-import time
-import wandb_log
 from torch.utils.data import DataLoader
-import multiprocessing
-from operator import itemgetter
-from utils import correct_regression, seed_worker, get_worker_generator, mape_batch, get_device
 
-import sys
+from operator import itemgetter
+from utils import get_device
+
 
 class BatchResult:
     def __init__(self):

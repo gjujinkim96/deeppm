@@ -16,7 +16,6 @@ from train_loop import run_batch, validate
 from loss_reporter import LossReporter
 
 class Trainer(object):
-    """ Training Helper Class """
     def __init__(self, cfg, model, ds, dumper, optimizer, lr_scheduler, loss_fn, device, small_training):
         self.cfg = cfg 
         self.model = model
@@ -78,7 +77,7 @@ class Trainer(object):
             
             self.loss_reporter.end_epoch()
             self.loss_reporter.log(self.dumper)
-            if save_epoch != -1:
+            if save_epoch != 0:
                 self.dumper.save_trained_model(epoch_no+1, self.model, self.optimizer, self.lr_scheduler)
             if save_epoch > 0:
                 if (epoch_no + 1) % save_epoch == 0:
@@ -94,7 +93,7 @@ class Trainer(object):
             wandb_log.wandb_log_val(val_result, epoch_no + 1)
             self.dumper.append_to_val_result(val_result, val_correct)
     
-            if save_epoch != -1 and val_correct >= best_correct:
+            if save_epoch != 0 and val_correct >= best_correct:
                 best_correct = val_correct
                 self.dumper.save_best_model(epoch_no+1, self.model, self.optimizer, self.lr_scheduler)
 

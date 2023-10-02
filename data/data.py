@@ -3,11 +3,6 @@
 import numpy as np
 import data.utilities as ut
 import random
-import torch.nn as nn
-import torch.autograd as autograd
-import torch.optim as optim
-import torch
-import matplotlib.pyplot as plt
 from collections import defaultdict
 
 

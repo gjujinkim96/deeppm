@@ -1,16 +1,12 @@
-import os
-import importlib, inspect
 from utils import recursive_vars
+from class_dict_builder import make_class_dict
 
-class_dict = {}
+# class dict build proces
+class_dict = make_class_dict(
+    'datasets',
+    custom_use_class=True
+)
 
-
-for file in os.listdir('dataset'):
-    if file.endswith('.py') and file != '__init__.py':
-        module = importlib.import_module(f'.{os.path.splitext(file)[0]}', package='dataset')
-        for name, cls in inspect.getmembers(module, inspect.isclass):
-            if cls.__module__ == module.__name__:
-                class_dict[name] = cls
 
 def load_dataset_from_cfg(data, cfg, show=False):
     train_dataset, val_dataset, test_dataset = load_dataset(data, cfg.data.dataset_class, recursive_vars(cfg.data.dataset_setting),

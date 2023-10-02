@@ -1,17 +1,12 @@
-import os
-import importlib, inspect
 from utils import recursive_vars
+from class_dict_builder import make_class_dict
 
-class_dict = {}
-
-for file in os.listdir('models'):
-    if file.endswith('.py') and file != '__init__.py':
-        module = importlib.import_module(f'.{os.path.splitext(file)[0]}', package='models')
-        for name, cls in inspect.getmembers(module, inspect.isclass):
-            if cls.__module__ == module.__name__:
-                class_dict[name] = cls
-
-
+# class dict build process
+class_dict = make_class_dict(
+    'models',
+    custom_use_class=True, 
+    custom_use_function=False
+)
 
 def load_model_from_cfg(cfg):
     model_setting = recursive_vars(getattr(cfg.model, 'model_setting', {}))
