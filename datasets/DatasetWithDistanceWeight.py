@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 
-from .utils import pad_block, TorchDict
+from .utils import pad_block, TorchDict, collate_function
    
 def make_attention_weight(mask, is_continual_pad=True):
     sizes = (~mask).sum(dim=1)
@@ -78,65 +78,30 @@ class DatasetWithDistanceWeight(Dataset):
         
         return TorchDict(**x_dict)
 
-    def collate_fn(self, batch):
-        short_x = []
-        short_y = []
-        long_x = []
-        long_y = []
-        short_inst_lens = []
-        long_inst_lens = []
+    def collate_short(self, short_x, short_y):
+        max_shape = torch.stack(
+                [torch.tensor(x.shape) for x in short_x]
+            ).max(dim=0)[0]
+        
+        short_x = torch.stack([
+            F.pad(tensor, 
+                (0, max_shape[1]-tensor.size(1), 0, max_shape[0]-tensor.size(0)), value=self.pad_idx)
+            for tensor in short_x
+        ])
 
-        short_index = []
-        long_index = []
-
-        for x, y, inst_len, index in batch:
-            if x.numel() <= self.too_long_limit:
-                short_x.append(x)
-                short_y.append(y)
-                short_inst_lens.append(inst_len)
-                short_index.append(index)
-            else:
-                long_x.append(x)
-                long_y.append(y)
-                long_inst_lens.append(inst_len)
-                long_index.append(index)
-
-        if len(short_x) > 0:
-            max_shape = torch.stack(
-                    [torch.tensor(x.shape) for x in short_x]
-                ).max(dim=0)[0]
-            
-            short_x = torch.stack([
-                F.pad(tensor, 
-                    (0, max_shape[1]-tensor.size(1), 0, max_shape[0]-tensor.size(0)), value=self.pad_idx)
-                for tensor in short_x
-            ])
-
-            short_y = torch.tensor(short_y)
-            short_x = self.make_input(short_x)
-
-        short_dict = {
-            'x': short_x,
-            'y': short_y,
-            'inst_len': short_inst_lens,
-            'index': short_index
-        }
-
-        long_list = []
-        for x, y, inst_len, index in zip(long_x, long_y, long_inst_lens, long_index):
-            cur_x = x.unsqueeze(0)
-            cur_x = self.make_input(cur_x)
-
-            cur_dict = {
-                'x': cur_x,
+        short_y = torch.tensor(short_y)
+        short_x = self.make_input(short_x)
+        return short_x, short_y
+    
+    def collate_long(self, long_x, long_y, long_inst_lens, long_index):
+        return [
+            {
+                'x': self.make_input(x.unsqueeze(0)),
                 'y': torch.tensor([y]),
                 'inst_len': [inst_len],
                 'index': [index]
-            }
-            long_list.append(cur_dict)
-        
-        return {
-            'short': short_dict,
-            'long': long_list
-        }
- 
+            } for x, y, inst_len, index in zip(long_x, long_y, long_inst_lens, long_index)
+        ]
+
+    def collate_fn(self, batch):
+        return collate_function(batch, self)

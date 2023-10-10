@@ -18,31 +18,6 @@
 
 ---
 
-# Bert 관련
-
-## bert_transformer.py
-
-- Implements the transformer used for BERT model.
-
-## bert.py
-
-- Implements the BERT model.
-
-## BertBaseline.py
-
-- Combine BERT with simplified DeepPM model(structure with 2 basic block, 2 seq block, 4 op block + default pytorch Transformer)
-
----
-
-# 기본 Transformer 사용한 DeepPM 관련
-
-## base_blocks.py
-
-- Contains classes for blocks used by deeppm structure (Seq, BasicBlock, Op)
-- Implemented using default pytorch Transformer
-
----
-
 # DeepPM 관련
 
 ## CustomSelfAttention.py
