@@ -18,7 +18,7 @@ class LossReporter(object):
     def avg_loss(self):
         if self.step == 0:
             return 10
-        return self.epoch_loss_sum/self.step
+        return self.epoch_loss_sum/self.total_cnts
 
     @property
     def avg_accuracy(self):

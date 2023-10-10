@@ -1,14 +1,23 @@
 model:
-  model_class: TransformerOnly
+  model_class: DeepPM
   model_setting:
     dim: 512
     n_heads: 8
     dim_ff: 2048
-    pred_drop: 0.1
     vocab_size: 700
-    num_basic_block_layer: 8
     pad_idx: from:data.special_token_idx.PAD
     use_checkpoint: true
+    num_basic_block_layer: 8
+    num_instruction_layer: 0
+    num_op_layer: 0
+    dropout: 0.0
+    pred_drop: 0.0
+    use_layernorm: false
+    use_pos_2d: false
+    activation: gelu
+    use_bb_attn: false
+    use_seq_attn: false
+    use_op_attn: false
 train:
   seed: 3431
   batch_size: 16
@@ -31,25 +40,31 @@ train:
     # x == 0: no save
     # x == -1: just save best and last epoch
     # x > 0: save every `x`th epoch and also best and last
-  cpu_count: null
+  cpu_count: 0
     # x == null: use multiprocessing.cpu_count
     # x == number: use that value
+  kfold:
+    using: false
+    k: 5
 data:
   data_file: training_data/intel_core.data
   data_setting:
     only_unique: true
     split_mode: num_instrs
-    train_perc: 8
-    val_perc: 2
-    test_perc: 0
+    train_perc: 7
+    val_perc: 1.5
+    test_perc: 1.5
     prepare_mode: stacked_raw
     shuffle: true
     instr_limit: 400
-    custom_idx_split: model_resources/data/idx_dict.dump
+    custom_idx_split: model_resources/data/7_1.5_1.5_idx_dict.dump
     given_token_mapping: model_resources/data/data_mapping.dump
-  dataset_class: StackedBlockDataset
+  dataset_class: DatasetWithDistanceWeight
   dataset_setting:
     too_long_limit: 512
+    return_bb_mask: false
+    return_seq_mask: false
+    return_op_mask: false
   special_token_idx:
     PAD: 0
     BLOCK_START: 1

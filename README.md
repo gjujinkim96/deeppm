@@ -3,7 +3,9 @@
 - https://github.com/tatp22/multidim-positional-encoding
 - https://docs.wandb.ai/quickstart
 
-최소 pytorch 버전 1.13.1
+- scikit-learn 필요
+- 최소 pytorch 버전 1.13.1
+
 
 ## Tokenizer
 * 주어진 basic block을 있는 그대로 tokenize하기 위해 사용

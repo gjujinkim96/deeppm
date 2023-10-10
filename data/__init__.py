@@ -32,3 +32,28 @@ def load_data_from_cfg(is_small_size, cfg):
     )
 
     return data
+
+def load_data_given_paths(cfg, custom_idx_split_path, given_token_mapping_path, small_size=False):
+    special_tokens = recursive_vars(cfg.data.special_token_idx)
+
+    data_setting = cfg.data.data_setting
+
+    idx_dict = torch.load(custom_idx_split_path)
+
+    given_token_mapping = torch.load(given_token_mapping_path, map_location=torch.device('cpu'))[0]
+
+    data = dt.load_data(
+        cfg.data.data_file, 
+        small_size=small_size,
+        only_unique=data_setting.only_unique,
+        split_mode=data_setting.split_mode,
+        split_perc=(data_setting.train_perc, data_setting.val_perc, data_setting.test_perc),
+        special_tokens=special_tokens,
+        prepare_mode=getattr(data_setting, 'prepare_mode', 'stacked'),
+        shuffle=getattr(data_setting, 'shuffle', False),
+        given_token_mapping=given_token_mapping,
+        instr_limit=getattr(data_setting, 'instr_limit', 400),
+        given_train_val_test_idx=idx_dict
+    )
+
+    return data

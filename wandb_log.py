@@ -2,10 +2,12 @@ import wandb
 import pandas as pd
 from utils import recursive_vars
 
-def wandb_init(args, cfg):
+WANDB_TAGS = ['v4:data_split']
+
+def wandb_init(args, cfg, group=None):
     mode = 'disabled' if args.wandb_disabled else 'online'
 
-    tags = ['v4:data_split']
+    tags = WANDB_TAGS
 
     config = recursive_vars(cfg)
     config['small_size'] = args.small_size
@@ -15,6 +17,7 @@ def wandb_init(args, cfg):
         config=config,
         mode=mode,
         name=args.exp_name,
+        group=group,
         tags=tags,
     )
 
@@ -207,6 +210,29 @@ def wandb_log_test(er):
 
     wandb.log(logging_dict)
 
+def wandb_test_init(args, cfg):
+    mode = 'disabled' if args.wandb_disabled else 'online'
+
+    tags = list(WANDB_TAGS)
+    tags.append('test')
+
+    config = recursive_vars(cfg)
+    config['small_size'] = args.small_size
+    config['exp/name'] = args.exp_name
+    config['exp/date'] = args.date
+    config['exp/model_type'] = args.type
+    config['exp/model_epoch'] = args.epoch
+    wandb.init(
+        project='deeppm',
+        config=config,
+        mode=mode,
+        name=f'{args.exp_name}/{args.date}/{args.type}/{args.epoch}',
+        tags=tags,
+    )
+
+    wandb.run.log_code(include_fn=lambda path: path.endswith(".py") or \
+                path.endswith(".sh") or path.endswith(".json") or path.endswith(".yaml"))
+    
 def wandb_log_train(br, lr, epoch):
     df = pd.DataFrame.from_dict({
         'predicted': br.prediction,

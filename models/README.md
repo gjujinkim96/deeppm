@@ -41,16 +41,6 @@
 - Contains classes for blocks used by deeppm structure (Seq, BasicBlock, Op)
 - Implemented using default pytorch Transformer
 
-## TransformerOnly.py
-
-- Model with 8 default pytorch Transformer
-
-
-## PadZeroCheckpoint.py
-
-- Implements deeppm using default pytorch Transformer + 2 basic block, 2 seq block, 4 op block
-
-
 ---
 
 # DeepPM 관련
@@ -69,8 +59,4 @@
 
 ## DeepPM.py
 
-- Implements deeppm using no layernorm + 2 basic block, 2 seq block, 4 op block + distance aware weight
-
-## NoNorm224.py
-
-- Implements deeppm using no layernorm + 2 basic block, 2 seq block, 4 op block
+- Implements deeppm

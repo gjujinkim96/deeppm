@@ -5,6 +5,12 @@ import data.utilities as ut
 import random
 from collections import defaultdict
 
+def get_group(x):
+    group_limit = [5, 10, 23, 50, 100, 150, 200]
+    for idx, limit in enumerate(group_limit):
+        if x < limit:
+            return idx
+    return idx + 1
 
 class Data(object):
 
@@ -43,9 +49,14 @@ class Data(object):
             self.val = [datum_mapping[idx] for idx in given_train_val_test_idx['val'] if idx in datum_mapping]
             self.test = [datum_mapping[idx] for idx in given_train_val_test_idx['test'] if idx in datum_mapping]
 
-            if small_size and len(self.val) == 0:
-                self.train = self.train[:-2]
-                self.val = self.train[-2:]
+            if small_size:
+                if len(self.val) == 0:
+                    self.val = self.train[-2:]
+                    self.train = self.train[:-2]
+                
+                if len(self.test) == 0:
+                    self.test = self.train[-2:]
+                    self.train = self.train[:-2]
             return 
         
         def get_train_val(size, train, val):
@@ -77,14 +88,6 @@ class Data(object):
 
             g = defaultdict(list)
 
-            group_limit = [5, 10, 23, 50, 100, 150, 200]
-            def get_group(x):
-                for idx, limit in enumerate(group_limit):
-                    if x < limit:
-                        return idx
-                return idx + 1
-
-
             for datum in tmp:
                 g_type = get_group(datum.block.num_instrs())
                 g[g_type].append(datum)
@@ -103,3 +106,17 @@ class Data(object):
             saying += f'  test: {len(self.test)}'
         
         print(saying)
+
+    def mix_train_val(self, train_code_id, val_code_id, code_id_mapping):
+        new_train = []
+        for code_id in train_code_id:
+            data_idx = code_id_mapping[code_id]
+            new_train.append(self.data[data_idx])
+        
+        new_val = []
+        for code_id in val_code_id:
+            data_idx = code_id_mapping[code_id]
+            new_val.append(self.data[data_idx])
+
+        self.train = new_train
+        self.val = new_val

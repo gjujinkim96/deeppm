@@ -1,31 +1,28 @@
 model:
-  model_class: DeepPMLearnableWeight
+  model_class: BatchRNN
   model_setting:
-    dim: 512
-    n_heads: 8
-    dim_ff: 2048
+    embedding_size: 512
+    hidden_size: 512
+    num_layers: 2
     vocab_size: 700
-    num_basic_block_layer: 2
-    num_instruction_layer: 2
-    num_op_layer: 4
     pad_idx: from:data.special_token_idx.PAD
-    use_checkpoint: true
-    dist_weight_len_limit: 40
 train:
   seed: 3431
-  batch_size: 16
-  val_batch_size: 16
+  batch_size: 4
+  val_batch_size: 4
   n_epochs: 30
-  clip_grad_norm: 0.2
-  optimizer: Adam
+  clip_grad_norm:  0.2
+  optimizer: SGD
   optimizer_setting:
-    lr: 0.00001
-  lr_scheduler: LinearLR
+    lr: 0.5
+    momentum: 0.9
   use_batch_step_lr: false
+  lr_scheduler: get_decay_after_delay_lr_sched
   lr_scheduler_setting:
-    total_iters: 5
+    delay: 2
+    div_factor: 1.2
   gradient_accumlation:
-    using: False
+    using: false
     steps: 4
   loss: MapeLoss
   # loss_setting:
@@ -36,25 +33,27 @@ train:
   cpu_count: null
     # x == null: use multiprocessing.cpu_count
     # x == number: use that value
+  kfold:
+    using: false
+    k: 5
 data:
   data_file: training_data/intel_core.data
   data_setting:
     only_unique: true
     split_mode: num_instrs
-    train_perc: 8
-    val_perc: 2
-    test_perc: 0
-    prepare_mode: stacked_raw
+    train_perc: 7
+    val_perc: 1.5
+    test_perc: 1.5
+    prepare_mode: stacked
     shuffle: true
     instr_limit: 400
-    custom_idx_split: model_resources/data/idx_dict.dump
-    given_token_mapping: model_resources/data/data_mapping.dump
-    # given_token_mapping: null
-  dataset_class: DatasetWithDistanceWeight
+    custom_idx_split: model_resources/data/7_1.5_1.5_idx_dict.dump
+    given_token_mapping: null
+  dataset_class: StackedBlockDataset
   dataset_setting:
-    return_raw_dist_weight: true
-    dist_weight_len_limit: 40
     too_long_limit: 512
+  # raw_data: false
+  #  sample usage of predifined special token idxs
   special_token_idx:
     PAD: 0
     BLOCK_START: 1
@@ -64,3 +63,4 @@ data:
     SEP: 5
     UNK: 6 
     MSK: 7
+    

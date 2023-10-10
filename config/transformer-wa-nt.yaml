@@ -7,12 +7,12 @@ model:
     vocab_size: 700
     pad_idx: from:data.special_token_idx.PAD
     use_checkpoint: true
-    num_basic_block_layer: 2
-    num_instruction_layer: 2
-    num_op_layer: 4
+    num_basic_block_layer: 8
+    num_instruction_layer: 0
+    num_op_layer: 0
     dropout: 0.0
     pred_drop: 0.0
-    use_layernorm: false
+    use_layernorm: true
     use_pos_2d: false
     activation: gelu
     use_bb_attn: true
@@ -54,11 +54,11 @@ data:
     train_perc: 7
     val_perc: 1.5
     test_perc: 1.5
-    prepare_mode: stacked
+    prepare_mode: stacked_raw
     shuffle: true
     instr_limit: 400
     custom_idx_split: model_resources/data/7_1.5_1.5_idx_dict.dump
-    given_token_mapping: null
+    given_token_mapping: model_resources/data/data_mapping.dump
   dataset_class: DatasetWithDistanceWeight
   dataset_setting:
     too_long_limit: 512

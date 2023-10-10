@@ -50,13 +50,6 @@ class DeepPMTransformerEncoderLayer(nn.Module):
             dropout = 0.0
 
         self.attn = CustomSelfAttention(dim, n_heads, dropout)
-        self.proj = nn.Linear(dim, dim)
-
-        self.pwff = nn.Sequential(
-            nn.Linear(dim, dim_ff),
-            act(),
-            nn.Linear(dim_ff, dim)
-        )
 
         self.dropout = nn.Dropout(dropout)
 
@@ -80,10 +73,10 @@ class DeepPMTransformerEncoderLayer(nn.Module):
         h = self.dropout(h)
 
         if self.use_layernorm:
-            h = self.norm1(x + self.proj(h))
+            h = self.norm1(x + h)
             h = self.norm2(h + self.pwff(h))
         else:
-            h = x + self.proj(h)
+            h = x + h
             h = h + self.pwff(h)
 
         return h

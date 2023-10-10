@@ -19,7 +19,7 @@ class Trainer(object):
     def __init__(self, cfg, model, ds, dumper, optimizer, lr_scheduler, loss_fn, device, small_training):
         self.cfg = cfg 
         self.model = model
-        self.train_ds, self.val_ds, self.test_ds = ds
+        self.train_ds, self.val_ds = ds
         self.dumper = dumper
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
@@ -47,6 +47,8 @@ class Trainer(object):
                         worker_init_fn=seed_worker, generator=generator) 
         epoch_len = len(loader)
         save_epoch = self.cfg.train.save_epoch
+        if save_epoch < -1:
+            raise ValueError('save epoch must be -1, 0, positive number')
 
         # train loop
         for epoch_no in range(self.cfg.train.n_epochs):

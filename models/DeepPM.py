@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .pos_encoder import get_positional_encoding_1d
+from .pos_encoder import get_positional_encoding_1d, get_positional_encoding_2d
 from .deeppm_basic_blocks import DeepPMBasicBlock, DeepPMSeq, DeepPMOp
 from utils import get_device
 
@@ -12,8 +12,15 @@ class DeepPM(nn.Module):
                 num_basic_block_layer=2,
                 num_instruction_layer=2,
                 num_op_layer=4, use_checkpoint=False, use_layernorm=False,
-                use_bb_attn=True, use_seq_attn=True, use_op_attn=True):
+                use_bb_attn=True, use_seq_attn=True, use_op_attn=True,
+                use_pos_2d=False, dropout=None, pred_drop=0.0, activation='gelu'):
         super().__init__()
+
+        self.num_basic_block_layer = num_basic_block_layer
+        self.num_instruction_layer = num_instruction_layer
+        self.num_op_layer = num_op_layer
+        if self.num_basic_block_layer <= 0:
+            raise ValueError('num_basic_block_layer must be larger than 1')
 
         self.use_checkpoint = use_checkpoint
         if self.use_checkpoint:
@@ -22,6 +29,10 @@ class DeepPM(nn.Module):
         else:
             self.dummy = None
 
+        self.use_pos_2d = use_pos_2d
+        if self.use_pos_2d:
+            self.pos_embed_2d = get_positional_encoding_2d(dim)
+        
         self.pos_embed = get_positional_encoding_1d(dim)
 
 
@@ -30,13 +41,19 @@ class DeepPM(nn.Module):
 
 
         self.basic_block = DeepPMBasicBlock(dim, dim_ff, n_heads, num_basic_block_layer, use_layernorm=use_layernorm,
-                            use_checkpoint=use_checkpoint, dummy=self.dummy)
-        self.instruction_block = DeepPMSeq(dim, dim_ff, n_heads, num_instruction_layer, use_layernorm=use_layernorm,
-                            use_checkpoint=use_checkpoint, dummy=self.dummy)
-        self.op_block = DeepPMOp(dim, dim_ff, n_heads, num_op_layer, use_layernorm=use_layernorm,
-                            use_checkpoint=use_checkpoint, dummy=self.dummy)
+                            use_checkpoint=use_checkpoint, dummy=self.dummy, dropout=dropout, activation=activation)
+        
+        if self.num_instruction_layer > 0:
+            self.instruction_block = DeepPMSeq(dim, dim_ff, n_heads, num_instruction_layer, use_layernorm=use_layernorm,
+                            use_checkpoint=use_checkpoint, dummy=self.dummy, dropout=dropout, activation=activation)
+        if self.num_op_layer > 0:
+            self.op_block = DeepPMOp(dim, dim_ff, n_heads, num_op_layer, use_layernorm=use_layernorm,
+                            use_checkpoint=use_checkpoint, dummy=self.dummy, dropout=dropout, activation=activation)
 
-        self.prediction = nn.Linear(dim, 1)
+        self.prediction = nn.Sequential(
+            nn.Dropout(pred_drop),
+            nn.Linear(dim, 1)
+        )
 
         self.use_bb_attn = use_bb_attn
         self.use_seq_attn = use_seq_attn
@@ -56,22 +73,28 @@ class DeepPM(nn.Module):
         #  B I S D
         output = self.embed(x)
 
-        #  B*I S D
-        output = output.view(batch_size * inst_size, seq_size, -1)
-        output = self.pos_embed(output)
+        if self.use_pos_2d:
+            output = self.pos_embed_2d(output)
+        else:
+            # B*I S H
+            output = output.view(batch_size * inst_size, seq_size, -1)
+            output = self.pos_embed(output)
 
-        #  B I S D
-        output = output.view(batch_size, inst_size, seq_size, -1)
+            # B I S H
+            output = output.view(batch_size, inst_size, seq_size, -1)
 
         output = self.basic_block(output, mask, bb_attn_mod)
-        output = self.instruction_block(output, mask, op_seq_mask, seq_attn_mod)
+
+        if self.num_instruction_layer > 0:
+            output = self.instruction_block(output, mask, op_seq_mask, seq_attn_mod)
 
         # reduce
         # B I H
         output = output[:, :, 0]
         output = self.pos_embed(output)
 
-        output = self.op_block(output, op_seq_mask, op_attn_mod)
+        if self.num_op_layer > 0:
+            output = self.op_block(output, op_seq_mask, op_attn_mod)
 
         #  B I
         output = output.sum(dim=1)

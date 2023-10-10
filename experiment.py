@@ -5,14 +5,17 @@ import shutil
 HOME = Path(__file__).parent
 
 class Experiment:
-    def __init__(self, name, time=None, exp_override=True):
+    def __init__(self, name, time=None, exp_existing=True, root=Path(HOME, 'saved'), use_raw_root=False):
         if time is None:
             now = datetime.datetime.now()
             time = f'{now.month:02}{now.day:02}'
 
-        self.root_dir = Path(HOME, 'saved', name, time)
+        if use_raw_root:
+            self.root_dir = root
+        else:
+            self.root_dir = root.joinpath(name, time)
         
-        if not exp_override and self.root_dir.is_dir():
+        if not exp_existing and self.root_dir.is_dir():
             raise ValueError(f'{self.root_dir} exist when it should not.')
         
         self.root_dir.mkdir(parents=True, exist_ok=True)
@@ -44,3 +47,24 @@ class Experiment:
         self.validation_results.touch()
         with open(self.validation_results, 'a') as f:
             f.write('loss,correct,batch\n')
+
+class KFoldExperiments:
+    def __init__(self, name, time=None, exp_existing=True, k=5):
+        if time is None:
+            now = datetime.datetime.now()
+            time = f'{now.month:02}{now.day:02}'
+
+        self.root_dir = Path(HOME, 'saved', f'kfold_{name}', time)
+        
+        if not exp_existing and self.root_dir.is_dir():
+            raise ValueError(f'{self.root_dir} exist when it should not.')
+        
+        self.folds = [
+            Experiment(name, exp_existing=exp_existing, 
+                        root=self.root_dir.joinpath(f'{i}'), use_raw_root=True)
+                for i in range(k)
+        ]
+
+    def restart(self):
+        for fold in self.folds:
+            fold.restart()
