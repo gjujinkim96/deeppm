@@ -17,7 +17,6 @@ class StackedBlockDataset(Dataset):
     def __len__(self):
         return self.total_size
     
-    # TODO: change index to code_id
     def __getitem__(self, index): 
         return self.xs[index], self.ys[index], self.inst_lens[index], self.code_id[index]
 

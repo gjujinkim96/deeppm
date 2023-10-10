@@ -9,14 +9,15 @@ from .checkpoint_utils import method_dummy_wrapper
 
 class DeepPMSeq(nn.Module):
     def __init__(self, dim, dim_ff, n_heads, n_layers, dropout=None, 
-                use_layernorm=False, layer_norm_eps=1e-05, use_checkpoint=False, activation='gelu', dummy=None):
+                use_layernorm=False, layer_norm_eps=1e-05, use_checkpoint=False, activation='gelu', dummy=None,
+                handle_neg=False):
         super().__init__()
 
         self.tr = nn.ModuleList(
             [
                 DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff,
                         use_layernorm=use_layernorm, layer_norm_eps=layer_norm_eps,
-                        dropout=dropout, activation=activation)
+                        dropout=dropout, activation=activation, handle_neg=handle_neg)
                     for _ in range(n_layers)
             ]
         )
@@ -57,14 +58,15 @@ class DeepPMSeq(nn.Module):
     
 class DeepPMBasicBlock(nn.Module):
     def __init__(self, dim, dim_ff, n_heads, n_layers, dropout=None, 
-                use_layernorm=False, layer_norm_eps=1e-05, use_checkpoint=False, activation='gelu', dummy=None):
+                use_layernorm=False, layer_norm_eps=1e-05, use_checkpoint=False, activation='gelu', dummy=None,
+                handle_neg=False):
         super().__init__()
 
         self.tr = nn.ModuleList(
             [
                 DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff,
                         use_layernorm=use_layernorm, layer_norm_eps=layer_norm_eps,
-                        dropout=dropout, activation=activation)
+                        dropout=dropout, activation=activation, handle_neg=handle_neg)
                     for _ in range(n_layers)
             ]
         )
@@ -99,14 +101,15 @@ class DeepPMBasicBlock(nn.Module):
     
 class DeepPMOp(nn.Module):
     def __init__(self, dim, dim_ff, n_heads, n_layers, dropout=None, 
-                use_layernorm=False, layer_norm_eps=1e-05, use_checkpoint=False, activation='gelu', dummy=None):
+                use_layernorm=False, layer_norm_eps=1e-05, use_checkpoint=False, activation='gelu', dummy=None,
+                handle_neg=False):
         super().__init__()
 
         self.tr = nn.ModuleList(
             [
                 DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff,
                         use_layernorm=use_layernorm, layer_norm_eps=layer_norm_eps,
-                        dropout=dropout, activation=activation)
+                        dropout=dropout, activation=activation, handle_neg=handle_neg)
                     for _ in range(n_layers)
             ]
         )

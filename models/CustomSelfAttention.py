@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class CustomSelfAttention(nn.Module):
-    def __init__(self, dim, n_heads, dropout=None):
+    def __init__(self, dim, n_heads, dropout=None, handle_neg=False):
         super().__init__()
         
         self.proj_q = nn.Linear(dim, dim)
@@ -22,6 +22,8 @@ class CustomSelfAttention(nn.Module):
             dropout = 0.0
         self.dropout = nn.Dropout(dropout)
         self.output = nn.Linear(dim, dim)
+
+        self.handle_neg = handle_neg
 
     def forward(self, x, key_padding_mask=None, attn_mask_modifier=None):
         # B S D
@@ -39,7 +41,10 @@ class CustomSelfAttention(nn.Module):
         energy = torch.matmul(q, k.permute(0, 1, 3, 2)) / (self.head_dim**0.5)
 
         if attn_mask_modifier is not None:
-            energy = energy * attn_mask_modifier.unsqueeze(1)
+            if self.handle_neg:
+                energy = energy - abs(energy * (1 - attn_mask_modifier.unsqueeze(1)))
+            else:
+                energy = energy * attn_mask_modifier.unsqueeze(1)
 
         if key_padding_mask is not None:
             energy = energy.masked_fill(key_padding_mask.unsqueeze(1).unsqueeze(-1), -1e10)

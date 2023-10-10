@@ -9,14 +9,14 @@ from .CustomSelfAttention import CustomSelfAttention
 
 class DeePPMTransformerEncoder(nn.Module):
     def __init__(self, num_layers, dim, n_heads, dim_ff=2048, use_layernorm=False, 
-                 layer_norm_eps=1e-05, dropout=None, use_checkpoint=False, activation='gelu'):
+                 layer_norm_eps=1e-05, dropout=None, use_checkpoint=False, activation='gelu', handle_neg=False):
         super().__init__()
 
         self.layers = nn.ModuleList(
             [
                 DeepPMTransformerEncoderLayer(dim, n_heads, dim_ff,
                                 use_layernorm=use_layernorm, layer_norm_eps=layer_norm_eps, dropout=dropout,
-                                activation=activation) 
+                                activation=activation, handle_neg=handle_neg) 
                     for _ in range(num_layers)
             ]
         )
@@ -36,7 +36,7 @@ class DeePPMTransformerEncoder(nn.Module):
     
 class DeepPMTransformerEncoderLayer(nn.Module):
     def __init__(self, dim, n_heads, dim_ff=2048, use_layernorm=False, layer_norm_eps=1e-05, dropout=None,
-                 activation='gelu'):
+                 activation='gelu', handle_neg=False):
         super().__init__()
 
         if activation == 'gelu':
@@ -49,7 +49,7 @@ class DeepPMTransformerEncoderLayer(nn.Module):
         if dropout is None:
             dropout = 0.0
 
-        self.attn = CustomSelfAttention(dim, n_heads, dropout)
+        self.attn = CustomSelfAttention(dim, n_heads, dropout, handle_neg=handle_neg)
 
         self.dropout = nn.Dropout(dropout)
 

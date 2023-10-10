@@ -13,7 +13,7 @@ class DeepPM(nn.Module):
                 num_instruction_layer=2,
                 num_op_layer=4, use_checkpoint=False, use_layernorm=False,
                 use_bb_attn=True, use_seq_attn=True, use_op_attn=True,
-                use_pos_2d=False, dropout=None, pred_drop=0.0, activation='gelu'):
+                use_pos_2d=False, dropout=None, pred_drop=0.0, activation='gelu', handle_neg=False):
         super().__init__()
 
         self.num_basic_block_layer = num_basic_block_layer
@@ -41,14 +41,17 @@ class DeepPM(nn.Module):
 
 
         self.basic_block = DeepPMBasicBlock(dim, dim_ff, n_heads, num_basic_block_layer, use_layernorm=use_layernorm,
-                            use_checkpoint=use_checkpoint, dummy=self.dummy, dropout=dropout, activation=activation)
+                            use_checkpoint=use_checkpoint, dummy=self.dummy, dropout=dropout, activation=activation,
+                            handle_neg=handle_neg)
         
         if self.num_instruction_layer > 0:
             self.instruction_block = DeepPMSeq(dim, dim_ff, n_heads, num_instruction_layer, use_layernorm=use_layernorm,
-                            use_checkpoint=use_checkpoint, dummy=self.dummy, dropout=dropout, activation=activation)
+                            use_checkpoint=use_checkpoint, dummy=self.dummy, dropout=dropout, activation=activation, 
+                            handle_neg=handle_neg)
         if self.num_op_layer > 0:
             self.op_block = DeepPMOp(dim, dim_ff, n_heads, num_op_layer, use_layernorm=use_layernorm,
-                            use_checkpoint=use_checkpoint, dummy=self.dummy, dropout=dropout, activation=activation)
+                            use_checkpoint=use_checkpoint, dummy=self.dummy, dropout=dropout, activation=activation,
+                            handle_neg=handle_neg)
 
         self.prediction = nn.Sequential(
             nn.Dropout(pred_drop),
