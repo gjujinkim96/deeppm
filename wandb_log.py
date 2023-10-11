@@ -2,18 +2,19 @@ import wandb
 import pandas as pd
 from utils import recursive_vars
 
-WANDB_TAGS = ['v4:data_split']
 
 def wandb_init(args, cfg, group=None):
+    wandb_cfg = cfg.log.wandb
+    mode = getattr(wandb_cfg, 'mode', 'online')
     mode = 'disabled' if args.wandb_disabled else 'online'
 
-    tags = WANDB_TAGS
+    tags = getattr(wandb_cfg, 'tags', [])
 
     config = recursive_vars(cfg)
     config['small_size'] = args.small_size
     config['small_training'] = args.small_training
     wandb.init(
-        project='deeppm',
+        project=getattr(wandb_cfg, 'project', None),
         config=config,
         mode=mode,
         name=args.exp_name,
@@ -28,22 +29,28 @@ def wandb_init(args, cfg, group=None):
 def wandb_finish():
     wandb.finish()
 
-cat_names = ['A:1~22', 'B:23~49', 'C:50~99', 'D:100~149', 'E:150~199', 'F:200~']
+def make_cat_names(cat_limits):
+    ret = []
+    c = 'A'
+    start = 1
+    for cat_limit in cat_limits:
+        ret.append(f'{c}:{start}~{cat_limit-1}')
+        start = cat_limit
+        c = chr(ord(c) + 1)
+    ret.append(f'{c}:{start}~')
+    return ret
+
+cat_limits = [23, 50, 100, 150, 200]
+cat_names = make_cat_names(cat_limits)
+
+def cat_idx_by_inst(value):
+    for idx, cat_limit in enumerate(cat_limits):
+        if value < cat_limit:
+            return idx
+    return idx + 1
 
 def cat_by_inst(value):
-    idx = 0
-    if value >= 23:
-        idx += 1
-    if value >= 50:
-        idx += 1
-    if value >= 100:
-        idx += 1
-    if value >= 150:
-        idx += 1
-    if value >= 200:
-        idx += 1
-
-    return cat_names[idx]
+    return cat_names[cat_idx_by_inst(value)]
 
 best_val_loss = float('inf')
 best_mape_loss = float('inf')
