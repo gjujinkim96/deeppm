@@ -6,7 +6,7 @@ import wandb_log
 import torch
 from train_loop import validate
 from utils import  get_device, correct_regression
-from experiment import Experiment
+from experiment import Experiment, get_default_root_dir
 
 import datasets as ds
 import losses as ls
@@ -15,7 +15,12 @@ import losses as ls
 def main():
     args = get_test_args(show=True)
 
-    exp = Experiment(args.exp_name, args.date, exp_existing=True)
+    date = args.date
+    if date is None:
+        root_dir = get_default_root_dir()
+        root_model_dir = root_dir.joinpath(args.exp_name)
+        date = max([child.name for child in root_model_dir.glob('[0-9][0-9][0-9][0-9]_[0-9][0-9]_[0-9][0-9]') if child.is_dir()])
+    exp = Experiment(args.exp_name, date, exp_existing=True)
 
     if args.type == 'best':
         model_path = exp.best_model_dump
@@ -46,12 +51,13 @@ def main():
     model = models.load_model_from_cfg(cfg)
 
     saved_model = torch.load(model_path, map_location=torch.device('cpu'))
+    model_epoch = saved_model['epoch']
     model.load_state_dict(saved_model['model'])
 
     loss_fn = ls.load_losses_from_cfg(cfg)
     
 
-    wandb_log.wandb_test_init(args, cfg)
+    wandb_log.wandb_test_init(args, cfg, model_epoch, date)
     
     result = validate(model, test_ds, loss_fn=loss_fn, device=device, batch_size=cfg.train.val_batch_size)
 

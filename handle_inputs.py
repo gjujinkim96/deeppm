@@ -31,7 +31,7 @@ def get_test_args(show=False):
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--exp_name', required=True, help='Name of the experiment to test')
-    parser.add_argument('--date', required=True, help='Date to use')
+    parser.add_argument('--date', required=False, help='Date to use')
     parser.add_argument('--type', required=False, default='best', choices=['best', 'last', 'epoch'], help='How to select model to use')
     parser.add_argument('--epoch', required=False, type=int, help='epoch to select model when type=epoch')
     parser.add_argument('--small_size', required=False, action='store_true', help='For quick test')

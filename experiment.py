@@ -4,11 +4,14 @@ import shutil
 
 HOME = Path(__file__).parent
 
+def get_default_root_dir():
+    return Path(HOME, 'saved')
+
 class Experiment:
     def __init__(self, name, time=None, exp_existing=True, root=Path(HOME, 'saved'), use_raw_root=False):
         if time is None:
             now = datetime.datetime.now()
-            time = f'{now.month:02}{now.day:02}'
+            time = f'{now.year}_{now.month:02}_{now.day:02}'
 
         if use_raw_root:
             self.root_dir = root
@@ -52,7 +55,7 @@ class KFoldExperiments:
     def __init__(self, name, time=None, exp_existing=True, k=5):
         if time is None:
             now = datetime.datetime.now()
-            time = f'{now.month:02}{now.day:02}'
+            time = f'{now.year}_{now.month:02}_{now.day:02}'
 
         self.root_dir = Path(HOME, 'saved', f'kfold_{name}', time)
         
