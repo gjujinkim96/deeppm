@@ -15,16 +15,14 @@ class Dumper:
     def dump_config(self, config):
         torch.save(config, self.experiment.config_dump)
 
-    def dump_data_mapping(self, data_mapping):
-        torch.save(data_mapping, self.experiment.data_mapping_dump)
+    def dump_data_holder(self, data_holder):
+        torch.save(data_holder.converter.dump_params(), self.experiment.data_mapping_dump)
 
-    def dump_idx_dict(self, data):
         idx_dict = {
-            'train': [datum.code_id for datum in data.train],
-            'val': [datum.code_id for datum in data.val],
-            'test': [datum.code_id for datum in data.test],
+            'train': [datum.code_id for datum in data_holder.train],
+            'val': [datum.code_id for datum in data_holder.val],
+            'test': [datum.code_id for datum in data_holder.test],
         }
-
         torch.save(idx_dict, self.experiment.idx_dict_dump)
 
     def append_to_loss_log(self, epoch_no, time, loss, accr):

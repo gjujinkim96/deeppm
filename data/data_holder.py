@@ -1,9 +1,6 @@
-#main data file
-
-import numpy as np
-import data.utilities as ut
-import random
 from collections import defaultdict
+from tqdm.auto import tqdm
+import random
 
 def get_group(x):
     group_limit = [5, 10, 23, 50, 100, 150, 200]
@@ -12,37 +9,36 @@ def get_group(x):
             return idx
     return idx + 1
 
-class Data(object):
+class DataHolder:
+    def __init__(self, data, converter):
+        self.data = data
+        self.converter = converter
 
-    """
-    Main data object which extracts data from a database, partition it and gives out batches.
+        self.train = []
+        self.val = []
+        self.test = []
 
-    """
-    def __init__(self): #copy constructor
-        self.costs = dict()
+    def cleanse_repeated(self, show=True):
+        grouped = defaultdict(list)
+        for idx, datum in enumerate(tqdm(self.data, total=len(self.data))):
+            grouped[datum.raw].append(idx)
 
-    def read_meta_data(self):
-
-        self.sym_dict,_ = ut.get_sym_dict()
-        self.offsets = ut.read_offsets()
-
-        self.opcode_start = self.offsets[0]
-        self.operand_start = self.offsets[1]
-        self.int_immed = self.offsets[2]
-        self.float_immed = self.offsets[3]
-        self.mem_start = self.offsets[4]
-
-        for i in range(self.opcode_start, self.mem_start):
-            self.costs[i] = 1
-
-
-    def generate_costdict(self, maxnum):
-        for i in range(self.opcode_start, self.mem_start):
-            self.costs[i] = np.random.randint(1,maxnum)
-
-    def generate_datasets(self, split_mode='none',
-                        split_perc=(8, 2, 0), shuffle=False, given_train_val_test_idx=None, small_size=False):
+        cleaned = []
+        for k, v in tqdm(grouped.items(), total=len(grouped)):
+            vs = [self.data[idx].y for idx in v]
+            new_y = sum(vs) / len(vs)
+            datum = self.data[v[0]]
+            datum.y = new_y
+            cleaned.append(datum)
         
+        if show:
+            print(f'{len(cleaned)} unique data found!')
+        
+        self.data = cleaned
+
+    def generate_datasets(self, split_mode='none', split_perc=(8, 2, 0),
+                        shuffle=False, given_train_val_test_idx=None,
+                        small_size=False):
         if given_train_val_test_idx is not None:
             datum_mapping = {datum.code_id: datum for datum in self.data}
             self.train = [datum_mapping[idx] for idx in given_train_val_test_idx['train'] if idx in datum_mapping]

@@ -10,7 +10,7 @@ class StackedBlockDataset(Dataset):
         self.too_long_limit = too_long_limit
         self.xs = [pad_block(datum.x, self.pad_idx) for datum in data]
         self.ys = [datum.y for datum in data]
-        self.inst_lens = [datum.block.num_instrs() for datum in data]
+        self.inst_lens = [datum.num_instrs for datum in data]
         self.total_size = len(self.xs)
         self.code_id = [datum.code_id for datum in data]
 

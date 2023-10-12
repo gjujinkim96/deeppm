@@ -42,11 +42,12 @@ def main():
         idx_dict_dump = args.idx_dump
     else:
         idx_dict_dump = exp.idx_dict_dump
-    data = load_data_given_paths(cfg, idx_dict_dump, exp.data_mapping_dump, small_size=args.small_size)
+
+    data_holder = load_data_given_paths(cfg, idx_dict_dump, exp.data_mapping_dump, small_size=args.small_size)
     
     device = get_device()
 
-    _, _, test_ds = ds.load_dataset_from_cfg(data, cfg, show=True)
+    _, _, test_ds = ds.load_dataset_from_cfg(data_holder, cfg, show=True)
 
     model = models.load_model_from_cfg(cfg)
 

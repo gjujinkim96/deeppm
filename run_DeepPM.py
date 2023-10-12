@@ -8,7 +8,6 @@ from utils import set_seeds, get_device
 from experiment import Experiment, KFoldExperiments
 
 import datasets as ds
-import data.data_cost as dt
 import optimizers as opt
 import lr_schedulers as lr_sch
 import losses as ls
@@ -16,22 +15,22 @@ import losses as ls
 from dumper import Dumper
 import numpy as np
 from sklearn.model_selection import StratifiedKFold
-from data.data import get_group
+from data.data_holder import get_group
 
 def kfold(args, cfg):
     device = get_device()
-    data = load_data_from_cfg(args.small_size, cfg)
+    data_holder = load_data_from_cfg(args.small_size, cfg)
 
     # kfold stuff
     using_code_ids = set()
-    for datum in data.train:
+    for datum in data_holder.data.train:
         using_code_ids.add(datum.code_id)
 
-    for datum in data.val:
+    for datum in data_holder.data.val:
         using_code_ids.add(datum.code_id)
 
     code_id_mapping = {}
-    for i, datum in enumerate(data.data):
+    for i, datum in enumerate(data_holder.data):
         if datum.code_id in using_code_ids:
             code_id_mapping[datum.code_id] = i
     
@@ -39,7 +38,7 @@ def kfold(args, cfg):
     y = []
     for code_id in using_code_ids:
         data_idx = code_id_mapping[code_id]
-        datum = data.data[data_idx]
+        datum = data_holder.data[data_idx]
         group = get_group(datum.block.num_instrs())
         y.append(group)
     y = np.array(y)
@@ -56,7 +55,7 @@ def kfold(args, cfg):
         train_code_id = x[train_idx]
         val_code_id = x[val_idx]
 
-        data.mix_train_val(train_code_id, val_code_id, code_id_mapping)
+        data_holder.mix_train_val(train_code_id, val_code_id, code_id_mapping)
 
         model = models.load_model_from_cfg(cfg)
         loss_fn = ls.load_losses_from_cfg(cfg)
@@ -66,7 +65,7 @@ def kfold(args, cfg):
         dumper = Dumper(expt)
         args.exp_name = f'{exp_name}_{i}'
 
-        train_ds, val_ds, _ = ds.load_dataset_from_cfg(data, cfg, show=True)
+        train_ds, val_ds, _ = ds.load_dataset_from_cfg(data_holder, cfg, show=True)
     
         if cfg.train.use_batch_step_lr:
             lr_scheduler = lr_sch.load_batch_lr_scheduler_from_cfg(optimizer, cfg, train_ds)
@@ -75,9 +74,8 @@ def kfold(args, cfg):
     
         wandb_log.wandb_init(args, cfg, group=exp_name)
     
-        dumper.dump_data_mapping(data.dump_dataset_params())
+        dumper.dump_data_holder(data_holder)
         dumper.dump_config(cfg)
-        dumper.dump_idx_dict(data)
 
         trainer = train.Trainer(cfg, model, (train_ds, val_ds), dumper, 
                                 optimizer, lr_scheduler, loss_fn, device, args.small_training)
@@ -97,9 +95,9 @@ def normal(args, cfg):
 
     device = get_device()
 
-    data = load_data_from_cfg(args.small_size, cfg)
+    data_holder = load_data_from_cfg(args.small_size, cfg)
 
-    train_ds, val_ds, _ = ds.load_dataset_from_cfg(data, cfg, show=True)
+    train_ds, val_ds, _ = ds.load_dataset_from_cfg(data_holder, cfg, show=True)
     model = models.load_model_from_cfg(cfg)
     loss_fn = ls.load_losses_from_cfg(cfg)
     optimizer = opt.load_optimizer_from_cfg(model, cfg)
@@ -112,9 +110,8 @@ def normal(args, cfg):
 
     wandb_log.wandb_init(args, cfg)
     
-    dumper.dump_data_mapping(data.dump_dataset_params())
+    dumper.dump_data_holder(data_holder)
     dumper.dump_config(cfg)
-    dumper.dump_idx_dict(data)
 
     trainer = train.Trainer(cfg, model, (train_ds, val_ds), dumper, 
                             optimizer, lr_scheduler, loss_fn, device, args.small_training)

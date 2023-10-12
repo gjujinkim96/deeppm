@@ -116,13 +116,22 @@ class Tokenizer:
 
 
     @classmethod
-    def from_raw(cls, raw):
+    def from_raw(cls, raw, special_toks=None):
         """ Create new tokenizer from raw data
         """
-        special_toks = [cls.pad_token, 
+        tokenizer_mapping = {}
+        if special_toks is not None:
+            for k, v in special_toks.items():
+                tokenizer_mapping[k] = v
+        
+        default_special_toks = [cls.pad_token, 
             cls.block_start_token, cls.block_end_token,
             cls.start_token, cls.end_token, cls.sep_token, cls.unk_token, cls.msk_token]
-        tokenizer_mapping = {tok: idx for idx, tok in enumerate(special_toks)}
+        cur_elem_cnt = len(tokenizer_mapping)
+        for special_tok in default_special_toks:
+            if special_tok not in tokenizer_mapping:
+                tokenizer_mapping[special_tok] = cur_elem_cnt
+                cur_elem_cnt += 1
         
         lines = [line[2] for line in raw]  
         for line in tqdm(lines):
