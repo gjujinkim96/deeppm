@@ -1,4 +1,4 @@
-# python run_DeepPM.py --cfg config/lstm.yaml --exp_name 'LSTM' --exp_override 
+python run_DeepPM.py --cfg config/lstm.yaml --exp_name 'LSTM' --exp_override 
 # python run_DeepPM.py --cfg config/lstm-nt.yaml --exp_name 'LSTM+NT' --exp_override
 
 # python run_DeepPM.py --cfg config/transformer.yaml --exp_name 'Transformer' --exp_override 
@@ -14,7 +14,7 @@
 # python run_DeepPM.py --cfg config/transformer-wa-nt.yaml --exp_name 'Transformer+WA+NT' --exp_override
 
 # python run_DeepPM.py --cfg config/deeppm.yaml --exp_name 'DeepPM' --exp_override 
-python run_DeepPM.py --cfg config/deeppm-nt.yaml --exp_name 'DeepPM+NT' --exp_override 
+# python run_DeepPM.py --cfg config/deeppm-nt.yaml --exp_name 'DeepPM+NT' --exp_override 
 
 
 

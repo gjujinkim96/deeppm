@@ -17,7 +17,7 @@ def load_data_from_cfg(is_small_size, cfg):
         idx_dict = None
 
     if data_setting.given_token_mapping is not None:
-        given_token_mapping = torch.load(data_setting.given_token_mapping, map_location=torch.device('cpu'))[0]
+        given_token_mapping = torch.load(data_setting.given_token_mapping, map_location=torch.device('cpu'))
     else:
         given_token_mapping = None
 
