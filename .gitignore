@@ -224,3 +224,6 @@ model_result
 results
 student_bert
 model_resources/bert/bert_weights.pth
+
+
+x86_cycle_i5_231016_v1
