@@ -85,7 +85,7 @@ class DataHolder:
             g = defaultdict(list)
 
             for datum in tmp:
-                g_type = get_group(datum.block.num_instrs())
+                g_type = get_group(datum.num_instrs)
                 g[g_type].append(datum)
 
             for k, grouped_data in g.items():

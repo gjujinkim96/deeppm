@@ -41,14 +41,14 @@ train:
     # x == 0: no save
     # x == -1: just save best and last epoch
     # x > 0: save every `x`th epoch and also best and last
-  cpu_count: null
+  cpu_count: 0
     # x == null: use multiprocessing.cpu_count
     # x == number: use that value
   kfold:
     using: false
     k: 5
 data:
-  data_file: training_data/intel_core.data
+  data_file: training_data/i5_cycle.data
   data_setting:
     only_unique: true
     split_mode: num_instrs
@@ -58,7 +58,7 @@ data:
     prepare_mode: stacked
     shuffle: true
     instr_limit: 400
-    custom_idx_split: model_resources/data/7_1.5_1.5_idx_dict.dump
+    custom_idx_split: model_resources/data/i5_cycle_811_idx_dict.dump
     given_token_mapping: null
   dataset_class: DatasetWithDistanceWeight
   dataset_setting:
@@ -80,4 +80,4 @@ log:
     project: deeppm
     mode: online # disabled
     tags:
-      - v4:data_split
+      - v5:i5
