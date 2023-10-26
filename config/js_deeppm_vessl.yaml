@@ -48,7 +48,7 @@ train:
     using: false
     k: 5
 data:
-  data_file: training_data/bb_x86_cycle_i5_231016_v1.data
+  data_file: ../input/snu-eng-gtx1080/jsshim-v1-i5-cycle.data  #training_data/bb_x86_cycle_i5_231016_v1.data
   data_setting:
     only_unique: true
     split_mode: num_instrs
