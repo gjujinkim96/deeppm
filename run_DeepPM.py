@@ -18,9 +18,16 @@ from sklearn.model_selection import StratifiedKFold
 from data.data_holder import get_group
 
 def kfold(args, cfg):
+    print("[jsshim-debug] print args")
+    print(args)
+
     device = get_device()
+    print(device)
+
     data_holder = load_data_from_cfg(args.small_size, cfg)
 
+    #exit()
+    
     # kfold stuff
     using_code_ids = set()
     for datum in data_holder.data.train:

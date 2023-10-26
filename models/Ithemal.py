@@ -585,13 +585,13 @@ class BatchRNN(AbstractGraphModule):
         tokens = tokens.view(batch_size * inst_size, seq_size, -1)
 
         # output = B*I S HID
-        output, _ = self.token_rnn(tokens)
+        output, _ = self.token_rnn(tokens) # padding이 있을텐데 바로 계산??
         
         #  B I S HID
         output = output.view(batch_size, inst_size, seq_size, -1)
-
+        
         #  B I HID
-        instr_chain = get_last_false_values(output, mask, dim=2)
+        instr_chain = get_last_false_values(output, mask, dim=2) # jsshim: 이해안됌
 
         #  B I HID
         inst_output, _ = self.instr_rnn(instr_chain)
@@ -604,5 +604,6 @@ class BatchRNN(AbstractGraphModule):
         
         #  B
         output = self.linear(final_state).squeeze(-1)
+
         return output
     

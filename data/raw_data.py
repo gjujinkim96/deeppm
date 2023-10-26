@@ -30,7 +30,10 @@ class RawData:
     def __init__(self, data_savefile, small_size=False, use_metadata=False):
         self.small_size = small_size
 
-        self.data = torch.load(data_savefile)
+        try:
+            self.data = torch.load(data_savefile)
+        except FileNotFoundError:
+            print(f"There is not '{data_savefile}'")
 
         if self.small_size:
             self.data = self.data[:100]

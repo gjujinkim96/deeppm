@@ -48,7 +48,7 @@ train:
     using: false
     k: 5
 data:
-  data_file: training_data/bb_x86_cycle_i5_231016_v1_temp.data
+  data_file: training_data/bb_x86_cycle_i5_231016_v1.data
   data_setting:
     only_unique: true
     split_mode: num_instrs
@@ -58,8 +58,8 @@ data:
     prepare_mode: stacked
     shuffle: true
     instr_limit: 400
-    custom_idx_split: model_resources/data/bb_x86_cycle_i5_231016_v1_temp.dump
-    given_token_mapping: null
+    custom_idx_split: model_resources/data/js_231025_v0_idx_dict.dump
+    given_token_mapping: model_resources/data/js_231025_v0_data_mapping.dump
   dataset_class: DatasetWithDistanceWeight
   dataset_setting:
     too_long_limit: 512
@@ -77,7 +77,7 @@ data:
     MSK: 7
 log:
   wandb:
-    project: deeppm
+    project: deeppm_test_v1_231024
     mode: online # disabled
     tags:
-      - v5:i5
+      - v0_02_deeppm_DatasetWithDistanceWeight

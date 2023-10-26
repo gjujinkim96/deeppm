@@ -123,6 +123,10 @@ class IthemalConverter:
 
             datum = IthemalDataItem(raw_instrs, timing, block, code_id, code_intel)
             converted_data.append(datum)
-        
+
+        #js
+        print("@@@@")
+        print(self.token_to_hot_idx)
+
         return converted_data
     

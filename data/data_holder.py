@@ -26,7 +26,7 @@ class DataHolder:
         cleaned = []
         for k, v in tqdm(grouped.items(), total=len(grouped)):
             vs = [self.data[idx].y for idx in v]
-            new_y = sum(vs) / len(vs)
+            new_y = sum(vs) / len(vs) # jsshim: why devide ?
             datum = self.data[v[0]]
             datum.y = new_y
             cleaned.append(datum)
@@ -84,9 +84,13 @@ class DataHolder:
 
             g = defaultdict(list)
 
-            for datum in tmp:
+            for datum in tqdm(tmp, total=len(tmp)):
                 g_type = get_group(datum.num_instrs)
                 g[g_type].append(datum)
+
+            # js
+            for k, grouped_data in g.items():
+                print(f"{k}: {len(grouped_data)}")
 
             for k, grouped_data in g.items():
                 random.shuffle(grouped_data)
@@ -102,6 +106,11 @@ class DataHolder:
             saying += f'  test: {len(self.test)}'
         
         print(saying)
+
+        #js
+        #random.shuffle(self.train)
+        #random.shuffle(self.val)
+        #random.shuffle(self.test)
 
     def mix_train_val(self, train_code_id, val_code_id, code_id_mapping):
         new_train = []
