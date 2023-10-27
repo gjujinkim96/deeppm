@@ -12,6 +12,12 @@ class IthemalDataItem:
         self.num_instrs = self.block.num_instrs()
         self.raw = raw
 
+    def __repr__(self):
+        return f'id:\t{self.code_id}\ny:\t{self.y}\nbasic block\n{self.raw}'
+
+    def __str__(self):
+        return self.__repr__()
+
 class IthemalConverter:
     def __init__(self, special_tokens=None, given_token_mapping=None):
         if given_token_mapping is not None:

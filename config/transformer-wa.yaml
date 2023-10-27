@@ -52,9 +52,9 @@ data:
   data_setting:
     only_unique: true
     split_mode: num_instrs
-    train_perc: 7
-    val_perc: 1.5
-    test_perc: 1.5
+    train_perc: 8
+    val_perc: 1
+    test_perc: 1
     prepare_mode: stacked
     shuffle: true
     instr_limit: 400

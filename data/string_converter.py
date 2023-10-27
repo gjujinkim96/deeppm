@@ -9,17 +9,23 @@ class StringDataItem:
         self.num_instrs = num_instrs
         self.raw = raw
 
+    def __repr__(self):
+        return f'id:\t{self.code_id}\ny:\t{self.y}\nbasic block\n{self.raw}'
+
+    def __str__(self):
+        return self.__repr__()
+
 class StringConverter:
     def __init__(self, special_tokens=None, given_token_mapping=None):
+        self.unk_tok = '<UNK>'
+        self.pad_tok = '<PAD>'
+        self.special_tokens = {}
+
         if given_token_mapping is not None:
             self.tokenizer = Tokenizer(dict(given_token_mapping))
         else:
             self.tokenizer = None
-            self.unk_tok = '<UNK>'
-            self.pad_tok = '<PAD>'
-
             if special_tokens is not None:
-                self.special_tokens = {}
                 self.next_hot_idx = max(special_tokens.values()) + 1
                 for k, v in special_tokens.items():
                     splitted = k.split('_')

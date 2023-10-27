@@ -42,8 +42,8 @@ data:
     only_unique: true
     split_mode: num_instrs
     train_perc: 8
-    val_perc: 2
-    test_perc: 0
+    val_perc: 1
+    test_perc: 1
     prepare_mode: stacked_raw
     shuffle: true
     instr_limit: 400

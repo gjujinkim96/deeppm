@@ -25,9 +25,10 @@ train:
   val_batch_size: 32
   n_epochs: 30
   clip_grad_norm: 0.2
-  optimizer: Adam
+  optimizer: SGD
   optimizer_setting:
-    lr: 0.00001
+    lr: 0.05
+    momentum: 0.9
   lr_scheduler: LinearLR
   use_batch_step_lr: false
   lr_scheduler_setting:

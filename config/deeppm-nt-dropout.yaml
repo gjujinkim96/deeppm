@@ -10,8 +10,8 @@ model:
     num_basic_block_layer: 2
     num_instruction_layer: 2
     num_op_layer: 4
-    dropout: 0.0
-    pred_drop: 0.0
+    dropout: 0.1
+    pred_drop: 0.1
     use_layernorm: false
     use_pos_2d: false
     activation: gelu
