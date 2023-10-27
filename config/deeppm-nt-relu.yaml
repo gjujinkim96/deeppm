@@ -6,7 +6,7 @@ model:
     dim_ff: 2048
     vocab_size: 700
     pad_idx: from:data.special_token_idx.PAD
-    use_checkpoint: false
+    use_checkpoint: true
     num_basic_block_layer: 2
     num_instruction_layer: 2
     num_op_layer: 4
