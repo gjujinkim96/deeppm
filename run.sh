@@ -29,7 +29,7 @@
 
 # python run_DeepPM.py --cfg config/deeppm-nt.yaml --exp_name 'DeepPM+NT' --exp_override  
 # python run_DeepPM.py --cfg config/deeppm-nt-batch-16.yaml --exp_name 'DeepPM+NT+Batch 16' --exp_override  
-# python run_DeepPM.py --cfg config/deeppm-nt-sgd.yaml --exp_name 'DeepPM+NT+SGD' --exp_override 
+python run_DeepPM.py --cfg config/deeppm-nt-sgd.yaml --exp_name 'DeepPM+NT+SGD' --exp_override 
 # python run_DeepPM.py --cfg config/deeppm-nt-betas.yaml --exp_name 'DeepPM+NT+Adam betas' --exp_override 
 # python run_DeepPM.py --cfg config/deeppm-nt-n_heads-16.yaml --exp_name 'DeepPM+NT+N heads 16' --exp_override 
 # python run_DeepPM.py --cfg config/deeppm-nt-relu.yaml --exp_name 'DeepPM+NT+relu' --exp_override 
