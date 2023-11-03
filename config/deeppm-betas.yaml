@@ -29,11 +29,10 @@ train:
   optimizer_setting:
     lr: 0.00001
     betas: !!python/tuple [0.8, 0.99]
+  lr_scheduler: LinearLR
   use_batch_step_lr: false
-  lr_scheduler: get_decay_after_delay_lr_sched
   lr_scheduler_setting:
-    delay: 2
-    div_factor: 1.2
+    total_iters: 5
   gradient_accumlation:
     using: False
     steps: 4
