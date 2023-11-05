@@ -25,7 +25,7 @@ train:
   val_batch_size: 4
   n_epochs: 30
   clip_grad_norm: 0.2
-  optimizer: Adam
+  optimizer: AdamW
   optimizer_setting:
     lr: 0.00001
   lr_scheduler: LinearLR
@@ -55,11 +55,11 @@ data:
     train_perc: 8
     val_perc: 1
     test_perc: 1
-    prepare_mode: stacked
+    prepare_mode: stacked_raw
     shuffle: true
     instr_limit: 400
     custom_idx_split: model_resources/data/i5_cycle_811_idx_dict.dump
-    given_token_mapping: null
+    given_token_mapping: model_resources/data/i5_cycle_data_mapping.dump
   dataset_class: DatasetWithDistanceWeight
   dataset_setting:
     too_long_limit: 512
