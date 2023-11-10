@@ -226,5 +226,6 @@ student_bert
 model_resources/bert/bert_weights.pth
 upload.sh
 download_result.sh
+download_model.sh
 
 x86_cycle_i5_231016_v1

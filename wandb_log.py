@@ -137,7 +137,7 @@ def log_inst_correct(logging_dict, df, log_type, log_prefix=''):
     inst_len_correct_table = wandb.Table(data=inst_len_correct_data, columns=["Inst_Len", "Correct"])
     logging_dict[f'{log_type}/summary/{type_prefix}inst_correct'] = wandb.plot.line(inst_len_correct_table, "Inst_Len", "Correct", title=f'{title_prefix}Correct % grouped by Inst len')
 
-def log_mean_error(logging_dict, df, log_type, log_prefix=''):
+def log_cat_mean_error(logging_dict, df, log_type, log_prefix=''):
     title_prefix, type_prefix = make_tile_and_type_prefix(log_prefix)
 
     cat_mape_mean = df.groupby('cat', observed=False).mape.mean()
@@ -174,7 +174,7 @@ def wandb_log_val(er, epoch):
         'epoch': epoch,
     }
 
-    log_mean_error(logging_dict, df, 'val')
+    log_cat_mean_error(logging_dict, df, 'val')
     log_cat_mape(logging_dict, df, 'val')
     log_correct_threshold(logging_dict, df, 'val')
     log_correct_threshold_25_cat(logging_dict, df, 'val')
@@ -183,7 +183,7 @@ def wandb_log_val(er, epoch):
     
     # best
     cur_accuracy = (df.mape < 25).mean().item()
-    if  cur_accuracy > best_val_25_accuracy:
+    if  cur_accuracy >= best_val_25_accuracy:
         best_val_25_accuracy = cur_accuracy
         wandb.run.summary['best_mape'] = er_mape
         wandb.run.summary['best_loss'] = er.loss
@@ -193,6 +193,8 @@ def wandb_log_val(er, epoch):
         log_threshold(logging_dict, df, 'val', 'best')
         log_inst_mape(logging_dict, df, 'val', 'best')
         log_inst_correct(logging_dict, df, 'val', 'best')
+
+        log_cat_mean_error(logging_dict, df, 'val', 'best')
 
     wandb.log(logging_dict)
 
@@ -207,7 +209,7 @@ def wandb_log_test(er):
     wandb.run.summary['test/mape'] = er_mape
 
 
-    log_mean_error(logging_dict, df, 'test')
+    log_cat_mean_error(logging_dict, df, 'test')
     log_cat_mape(wandb.run.summary, df, 'test')
     log_correct_threshold(wandb.run.summary, df, 'test')
     log_correct_threshold_25_cat(wandb.run.summary, df, 'val')
