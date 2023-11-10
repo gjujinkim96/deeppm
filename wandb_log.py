@@ -148,6 +148,14 @@ def log_cat_mean_error(logging_dict, df, log_type, log_prefix=''):
     mape_table = wandb.Table(data=mape_data, columns = ["Number of Instructions", "Mean MAPE Error"])
     logging_dict[f'{log_type}/summary/{type_prefix}mean error'] = wandb.plot.bar(mape_table, "Number of Instructions", 'Mean MAPE Error', title=f'{title_prefix}Mean Error Over Size')
 
+def log_cat_correct(logging_dict, df, log_type, log_prefix=''):
+    title_prefix, type_prefix = make_tile_and_type_prefix(log_prefix)
+
+    cat_correct_mean = df.groupby('cat', observed=False).correct.mean()
+    correct_data = [[label, val] for (label, val) in zip(CATS.names, cat_correct_mean)]
+    correct_table = wandb.Table(data=correct_data, columns = ["Number of Instructions", "Correct"])
+    logging_dict[f'{log_type}/summary/{type_prefix}cat correct'] = wandb.plot.bar(correct_table, "Number of Instructions", 'Correct', title=f'{title_prefix}Correct(25) Over Size')
+
 def log_correct_threshold(logging_dict, df, log_type, log_prefix=''):
     title_prefix, type_prefix = make_tile_and_type_prefix(log_prefix)
     for threshold in THRESHOLDS:
@@ -177,7 +185,7 @@ def wandb_log_val(er, epoch):
         'epoch': epoch,
     }
 
-    log_cat_mean_error(logging_dict, df, 'val')
+    # log_cat_mean_error(logging_dict, df, 'val')
     log_cat_mape(logging_dict, df, 'val')
     log_correct_threshold(logging_dict, df, 'val')
     log_correct_threshold_25_cat(logging_dict, df, 'val')
@@ -198,6 +206,7 @@ def wandb_log_val(er, epoch):
         log_inst_correct(logging_dict, df, 'val', 'best')
 
         log_cat_mean_error(logging_dict, df, 'val', 'best')
+        log_cat_correct(logging_dict, df, 'val', 'best')
 
     wandb.log(logging_dict)
 
@@ -213,6 +222,7 @@ def wandb_log_test(er):
 
 
     log_cat_mean_error(logging_dict, df, 'test')
+    log_cat_correct(logging_dict, df, 'test')
     log_cat_mape(wandb.run.summary, df, 'test')
     log_correct_threshold(wandb.run.summary, df, 'test')
     log_correct_threshold_25_cat(wandb.run.summary, df, 'test')
