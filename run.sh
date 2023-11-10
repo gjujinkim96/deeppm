@@ -4,7 +4,7 @@
 # python run_DeepPM.py --cfg config/transformer.yaml --exp_name 'Transformer' --exp_override 
 # python run_DeepPM.py --cfg config/transformer-nt.yaml --exp_name 'Transformer+NT' --exp_override
 
-# python run_DeepPM.py --cfg config/transformer-3e.yaml --exp_name 'Transformer+3E' --exp_override
+python run_DeepPM.py --cfg config/transformer-3e.yaml --exp_name 'Transformer+3E' --exp_override
 # python run_DeepPM.py --cfg config/transformer-3e-nt.yaml --exp_name 'Transformer+3E+NT' --exp_override 
 
 # python run_DeepPM.py --cfg config/transformer-nn.yaml --exp_name 'Transformer+NN' --exp_override 
@@ -19,7 +19,7 @@
 # python run_DeepPM.py --cfg config/deeppm-mod.yaml --exp_name 'DeepPM+Mod' --exp_override 
 
 
-python run_DeepPM.py --cfg config/deeppm.yaml --exp_name 'DeepPM+Batch 4' --exp_override  
+# python run_DeepPM.py --cfg config/deeppm.yaml --exp_name 'DeepPM+Batch 4' --exp_override  
 # python run_DeepPM.py --cfg config/deeppm-sgd.yaml --exp_name 'DeepPM + SGD' --exp_override 
 # python run_DeepPM.py --cfg config/deeppm-betas.yaml --exp_name 'DeepPM + Adam betas' --exp_override 
 # python run_DeepPM.py --cfg config/deeppm-n_heads-16.yaml --exp_name 'DeepPM + n heads 16' --exp_override 
