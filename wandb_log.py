@@ -63,26 +63,29 @@ def wandb_test_init(args, cfg, model_epoch, date):
     mode = getattr(wandb_cfg, 'mode', 'online')
     mode = 'disabled' if args.wandb_disabled else 'online'
 
-    tags = getattr(wandb_cfg, 'tags', [])
-    tags.append('test')
+    if args.resume_id is None:
+        tags = getattr(wandb_cfg, 'tags', [])
+        tags.append('test')
 
-    config = recursive_vars(cfg)
-    config['small_size'] = args.small_size
-    config['exp/name'] = args.exp_name
-    config['exp/date'] = date
-    config['exp/model_type'] = args.type
-    config['exp/model_epoch'] = model_epoch
+        config = recursive_vars(cfg)
+        config['small_size'] = args.small_size
+        config['exp/name'] = args.exp_name
+        config['exp/date'] = date
+        config['exp/model_type'] = args.type
+        config['exp/model_epoch'] = model_epoch
 
-    wandb.init(
-        project=getattr(wandb_cfg, 'project', None),
-        config=config,
-        mode=mode,
-        name=f'{args.exp_name}/{date}/{args.type}/{model_epoch}',
-        tags=tags,
-    )
+        wandb.init(
+            project=getattr(wandb_cfg, 'project', None),
+            config=config,
+            mode=mode,
+            name=f'{args.exp_name}/{date}/{args.type}/{model_epoch}',
+            tags=tags,
+        )
 
-    wandb.run.log_code(include_fn=lambda path: path.endswith(".py") or \
-                path.endswith(".sh") or path.endswith(".json") or path.endswith(".yaml"))
+        wandb.run.log_code(include_fn=lambda path: path.endswith(".py") or \
+                    path.endswith(".sh") or path.endswith(".json") or path.endswith(".yaml"))
+    else:
+        wandb.init(cfg.log.wandb.project, id=args.resume_id, resume='must', mode=mode)
     
 def wandb_finish():
     wandb.finish()
@@ -212,7 +215,7 @@ def wandb_log_test(er):
     log_cat_mean_error(logging_dict, df, 'test')
     log_cat_mape(wandb.run.summary, df, 'test')
     log_correct_threshold(wandb.run.summary, df, 'test')
-    log_correct_threshold_25_cat(wandb.run.summary, df, 'val')
+    log_correct_threshold_25_cat(wandb.run.summary, df, 'test')
 
     
     log_scatter(logging_dict, df, 'test')

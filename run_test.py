@@ -54,6 +54,7 @@ def main():
     saved_model = torch.load(model_path, map_location=torch.device('cpu'))
     model_epoch = saved_model['epoch']
     model.load_state_dict(saved_model['model'])
+    print('model loaded')
 
     loss_fn = ls.load_losses_from_cfg(cfg)
     
@@ -62,8 +63,8 @@ def main():
     
     result = validate(model, test_ds, loss_fn=loss_fn, device=device, batch_size=cfg.train.val_batch_size)
 
-    val_correct = correct_regression(result.prediction, result.measured, 25)
-    print(f'Validate: loss - {result.loss}\n\t{val_correct}/{result.batch_len} = {val_correct / result.batch_len}\n')
+    test_correct = correct_regression(result.prediction, result.measured, 25)
+    print(f'Test: loss - {result.loss}\n\t{test_correct}/{result.batch_len} = {test_correct / result.batch_len}\n')
     print()
 
     wandb_log.wandb_log_test(result)

@@ -36,6 +36,30 @@ def get_test_args(show=False):
     parser.add_argument('--epoch', required=False, type=int, help='epoch to select model when type=epoch')
     parser.add_argument('--small_size', required=False, action='store_true', help='For quick test')
     parser.add_argument('--idx_dump', required=False)
+    parser.add_argument('--resume_id', required=False)
+
+    parser.add_argument('--wandb_disabled', required=False, action='store_true', help='For turning wandb logging off')
+    args = parser.parse_args()
+
+    if show:
+        print('###################')
+        print(f'Args')
+        print('###################')
+        print(yaml.dump(vars(args), default_flow_style=False))
+        print()
+
+    return args
+
+def get_missing_log_args(show=False):
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('--exp_name', required=True, help='Name of the experiment to test')
+    parser.add_argument('--date', required=False, help='Date to use')
+    parser.add_argument('--type', required=False, default='best', choices=['best', 'last', 'epoch'], help='How to select model to use')
+    parser.add_argument('--epoch', required=False, type=int, help='epoch to select model when type=epoch')
+    parser.add_argument('--small_size', required=False, action='store_true', help='For quick test')
+    parser.add_argument('--idx_dump', required=False)
+    parser.add_argument('--resume_id', required=True)
 
     parser.add_argument('--wandb_disabled', required=False, action='store_true', help='For turning wandb logging off')
     args = parser.parse_args()

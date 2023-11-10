@@ -1,4 +1,4 @@
-from handle_inputs import get_test_args
+from handle_inputs import get_missing_log_args
 from data import load_data_given_paths
 import models
 import wandb_log
@@ -14,7 +14,7 @@ import losses as ls
 import wandb
 
 def main():
-    args = get_test_args(show=True)
+    args = get_missing_log_args(show=True)
 
     date = args.date
     if date is None:
@@ -37,12 +37,18 @@ def main():
     if not model_path.exists():
         raise ValueError(f'invalid model_path {model_path}')
     
+    last_model = torch.load(exp.trained_model_dump, map_location=torch.device('cpu'))
+    last_epoch = last_model['epoch']
+    last_model = None
+    
     cfg = torch.load(exp.config_dump)
     
     if args.idx_dump is not None:
         idx_dict_dump = args.idx_dump
     else:
         idx_dict_dump = exp.idx_dict_dump
+
+    wandb.init(cfg.log.wandb.project, id=args.resume_id, resume='must')
 
     data_holder = load_data_given_paths(cfg, idx_dict_dump, exp.data_mapping_dump, small_size=args.small_size)
     
@@ -53,24 +59,19 @@ def main():
     model = models.load_model_from_cfg(cfg)
 
     saved_model = torch.load(model_path, map_location=torch.device('cpu'))
-    model_epoch = saved_model['epoch']
     model.load_state_dict(saved_model['model'])
+    print('model loaded')
 
     loss_fn = ls.load_losses_from_cfg(cfg)
     
-    run = wandb.init(cfg.log.wandb.project, id='Test', resume=True)
-    # wandb_log.wandb_test_init(args, cfg, model_epoch, date)
-    
     result = validate(model, val_ds, loss_fn=loss_fn, device=device, batch_size=cfg.train.val_batch_size)
 
-
     logging_dict = {
-        'epoch': model_epoch+1,
     }
 
     df = wandb_log.make_df_from_batch_result(result)
     wandb_log.log_cat_mean_error(logging_dict, df, 'val', 'best')
-
+    print(logging_dict)
     wandb.log(logging_dict)
     wandb_log.wandb_finish()
 
