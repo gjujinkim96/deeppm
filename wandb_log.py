@@ -146,7 +146,7 @@ def log_cat_mean_error(logging_dict, df, log_type, log_prefix=''):
     cat_mape_mean = df.groupby('cat', observed=False).mape.mean()
     mape_data = [[label, val] for (label, val) in zip(CATS.names, cat_mape_mean)]
     mape_table = wandb.Table(data=mape_data, columns = ["Number of Instructions", "Mean MAPE Error"])
-    logging_dict[f'{log_type}/summary/{type_prefix}mean error'] = wandb.plot.bar(mape_table, "Number of Instructions", 'Mean MAPE Error', title=f'{title_prefix}Mean Error Over Size')
+    logging_dict[f'{log_type}/summary/{type_prefix}mean error'] = wandb.plot.bar(mape_table, "Number of Instructions", 'Mean MAPE Error', title=f'{title_prefix}Grouped Mape Error')
 
 def log_cat_correct(logging_dict, df, log_type, log_prefix=''):
     title_prefix, type_prefix = make_tile_and_type_prefix(log_prefix)
@@ -154,7 +154,7 @@ def log_cat_correct(logging_dict, df, log_type, log_prefix=''):
     cat_correct_mean = df.groupby('cat', observed=False).correct.mean()
     correct_data = [[label, val] for (label, val) in zip(CATS.names, cat_correct_mean)]
     correct_table = wandb.Table(data=correct_data, columns = ["Number of Instructions", "Correct"])
-    logging_dict[f'{log_type}/summary/{type_prefix}cat correct'] = wandb.plot.bar(correct_table, "Number of Instructions", 'Correct', title=f'{title_prefix}Correct(25) Over Size')
+    logging_dict[f'{log_type}/summary/{type_prefix}cat correct'] = wandb.plot.bar(correct_table, "Number of Instructions", 'Correct', title=f'{title_prefix}Grouped Accuracy @ 25%')
 
 def log_correct_threshold(logging_dict, df, log_type, log_prefix=''):
     title_prefix, type_prefix = make_tile_and_type_prefix(log_prefix)
