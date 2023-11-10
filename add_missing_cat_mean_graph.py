@@ -71,7 +71,6 @@ def main():
 
     df = wandb_log.make_df_from_batch_result(result)
     wandb_log.log_cat_mean_error(logging_dict, df, 'val', 'best')
-    print(logging_dict)
     wandb.log(logging_dict)
     wandb_log.wandb_finish()
 
