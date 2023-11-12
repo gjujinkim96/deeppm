@@ -1,9 +1,9 @@
 model:
   model_class: BatchRNN
   model_setting:
-    embedding_size: 512
-    hidden_size: 512
-    num_layers: 2
+    embedding_size: 256
+    hidden_size: 256
+    num_layers: 1
     vocab_size: 700
     pad_idx: from:data.special_token_idx.PAD
 train:
