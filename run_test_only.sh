@@ -1,0 +1,1 @@
+python run_test_only.py --exp_name 'DeepPM+Batch 4' --wandb_project 'new deeppm' --test_path 'training_data/i5_cycle_test_only.data'

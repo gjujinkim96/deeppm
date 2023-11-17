@@ -7,7 +7,7 @@
 # python run_DeepPM.py --cfg config/transformer-3e.yaml --exp_name 'Transformer+3E' --exp_override
 # python run_DeepPM.py --cfg config/transformer-3e-nt.yaml --exp_name 'Transformer+3E+NT' --exp_override 
 
-# python run_DeepPM.py --cfg config/transformer-nn.yaml --exp_name 'Transformer+NN' --exp_override 
+python run_DeepPM.py --cfg config/transformer-nn.yaml --exp_name 'Transformer+NN' --exp_override 
 # python run_DeepPM.py --cfg config/transformer-nn-nt.yaml --exp_name 'Transformer+NN+NT' --exp_override 
 
 # python run_DeepPM.py --cfg config/transformer-wa.yaml --exp_name 'Transformer+WA' --exp_override 

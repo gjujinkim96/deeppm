@@ -63,12 +63,13 @@ def wandb_test_init(args, cfg, model_epoch, date):
     mode = getattr(wandb_cfg, 'mode', 'online')
     mode = 'disabled' if args.wandb_disabled else 'online'
 
-    if args.resume_id is None:
+    if getattr(args, 'resume_id', None) is None:
         tags = getattr(wandb_cfg, 'tags', [])
         tags.append('test')
 
         config = recursive_vars(cfg)
-        config['small_size'] = args.small_size
+        if getattr(args, 'small_size', None) is not None:
+            config['small_size'] = args.small_size
         config['exp/name'] = args.exp_name
         config['exp/date'] = date
         config['exp/model_type'] = args.type

@@ -46,13 +46,14 @@ class DataHolder:
             self.test = [datum_mapping[idx] for idx in given_train_val_test_idx['test'] if idx in datum_mapping]
 
             if small_size:
-                if len(self.val) == 0:
-                    self.val = self.train[-2:]
-                    self.train = self.train[:-2]
-                
-                if len(self.test) == 0:
-                    self.test = self.train[-2:]
-                    self.train = self.train[:-2]
+                if len(self.train) != 0 or len(self.val) != 0:
+                    if len(self.val) == 0:
+                        self.val = self.train[-2:]
+                        self.train = self.train[:-2]
+                    
+                    if len(self.test) == 0:
+                        self.test = self.train[-2:]
+                        self.train = self.train[:-2]
             return 
         
         def get_train_val(size, train, val):
