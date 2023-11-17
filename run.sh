@@ -10,7 +10,7 @@
 python run_DeepPM.py --cfg config/transformer-nn.yaml --exp_name 'Transformer+NN' --exp_override 
 # python run_DeepPM.py --cfg config/transformer-nn-nt.yaml --exp_name 'Transformer+NN+NT' --exp_override 
 
-# python run_DeepPM.py --cfg config/transformer-wa.yaml --exp_name 'Transformer+WA' --exp_override 
+python run_DeepPM.py --cfg config/transformer-wa.yaml --exp_name 'Transformer+WA' --exp_override 
 # python run_DeepPM.py --cfg config/transformer-wa-nt.yaml --exp_name 'Transformer+WA+NT' --exp_override
 
 # python run_DeepPM.py --cfg config/deeppm.yaml --exp_name 'DeepPM+dropout-0.1' --exp_override 

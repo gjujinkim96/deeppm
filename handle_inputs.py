@@ -55,7 +55,7 @@ def get_test_only_args(show=False):
 
     parser.add_argument('--exp_name', required=True, help='Name of the experiment to test')
     parser.add_argument('--wandb_project', required=True, help='Override wandb project name')
-    parser.add_argument('--test_path', required=True, help='Test path')
+    parser.add_argument('--data_path', required=True, help='Data path')
     parser.add_argument('--small_size', required=False, action='store_true', help='For quick test')
     parser.add_argument('--date', required=False, help='Date to use')
     parser.add_argument('--type', required=False, default='best', choices=['best', 'last', 'epoch'], help='How to select model to use')

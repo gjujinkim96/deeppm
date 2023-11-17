@@ -40,7 +40,7 @@ def main():
     cfg = torch.load(exp.config_dump)
     cfg.log.wandb.project = args.wandb_project
 
-    data_holder = load_test_only_data_given_paths(cfg, args.test_path, exp.data_mapping_dump, args.small_size)
+    data_holder = load_test_only_data_given_paths(cfg, args.data_path, exp.data_mapping_dump, args.small_size)
     
     device = get_device()
 
