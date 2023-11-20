@@ -1,0 +1,72 @@
+model:
+  model_class: BatchRNN
+  model_setting:
+    embedding_size: 256
+    hidden_size: 256
+    num_layers: 1
+    vocab_size: 700
+    pad_idx: from:data.special_token_idx.PAD
+train:
+  seed: 3431
+  batch_size: 4
+  val_batch_size: 4
+  n_epochs: 30
+  clip_grad_norm:  0.2
+  optimizer: SGD
+  optimizer_setting:
+    lr: 0.5
+    momentum: 0.9
+  use_batch_step_lr: false
+  lr_scheduler: get_decay_after_delay_lr_sched
+  lr_scheduler_setting:
+    delay: 2
+    div_factor: 1.2
+  gradient_accumlation:
+    using: false
+    steps: 4
+  loss: MapeLoss
+  # loss_setting:
+  save_epoch: -1
+    # x == 0: no save
+    # x == -1: just save best and last epoch
+    # x > 0: save every `x`th epoch and also best and last
+  cpu_count: 0
+    # x == null: use multiprocessing.cpu_count
+    # x == number: use that value
+  kfold:
+    using: false
+    k: 5
+data:
+  data_file: training_data/i5_power_x100.data
+  data_setting:
+    only_unique: true
+    split_mode: num_instrs
+    train_perc: 8
+    val_perc: 1
+    test_perc: 1
+    prepare_mode: stacked_raw
+    shuffle: true
+    instr_limit: 400
+    custom_idx_split: null
+    given_token_mapping: null
+  dataset_class: StackedBlockDataset
+  dataset_setting:
+    too_long_limit: 512
+  # raw_data: false
+  #  sample usage of predifined special token idxs
+  special_token_idx:
+    PAD: 0
+    BLOCK_START: 1
+    BLOCK_END: 2
+    START: 3
+    END: 4  
+    SEP: 5
+    UNK: 6 
+    MSK: 7
+log:
+  wandb:
+    project: deeppm
+    mode: online # disabled
+    tags:
+      - v5:i5
+      - power
