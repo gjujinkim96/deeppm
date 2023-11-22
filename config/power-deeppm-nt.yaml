@@ -48,7 +48,7 @@ train:
     using: false
     k: 5
 data:
-  data_file: training_data/i5_power_x100.data
+  data_file: training_data/intel_power_100x.data
   data_setting:
     only_unique: true
     split_mode: num_instrs
