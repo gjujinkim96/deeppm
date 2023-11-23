@@ -27,7 +27,7 @@ train:
   clip_grad_norm: 0.2
   optimizer: Adam
   optimizer_setting:
-    lr: 0.00001
+    lr: 0.00003
   lr_scheduler: LinearLR
   use_batch_step_lr: false
   lr_scheduler_setting:
@@ -55,7 +55,7 @@ data:
     train_perc: 8
     val_perc: 1
     test_perc: 1
-    prepare_mode: stacked
+    prepare_mode: stacked_raw
     shuffle: true
     instr_limit: 400
     custom_idx_split: null
