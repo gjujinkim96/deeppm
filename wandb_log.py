@@ -97,7 +97,7 @@ def make_df_from_batch_result(result):
         'predicted': result.prediction,
         'measured': result.measured,
         'inst_lens': result.inst_lens,
-        'index': result.index,
+        'code_id': result.index,
     })
 
     df['mape'] = abs(df.predicted - df.measured) * 100 / (df.measured + 1e-5)
@@ -114,7 +114,7 @@ def make_tile_and_type_prefix(log_prefix):
 def log_scatter(logging_dict, df, log_type, log_prefix=''):
     title_prefix, type_prefix = make_tile_and_type_prefix(log_prefix)
 
-    scatter_data = [[x, y, z, a] for (x, y, z, a) in zip(df.predicted, df.measured, df.inst_lens, df.index)]
+    scatter_data = [[x, y, z, a] for (x, y, z, a) in zip(df.predicted, df.measured, df.inst_lens, df.code_id)]
     scatter_table = wandb.Table(data=scatter_data, columns = ["Predicted", "Measured", "Inst_Len", "Index"])
     logging_dict[f'{log_type}/summary/{type_prefix}scatter'] = wandb.plot.scatter(scatter_table, "Predicted", "Measured", title=f'{title_prefix}Measured vs. Predicted')
 

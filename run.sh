@@ -35,9 +35,12 @@
 # python run_DeepPM.py --cfg config/deeppm-nt-relu.yaml --exp_name 'DeepPM+NT+relu' --exp_override 
 # python run_DeepPM.py --cfg config/deeppm-nt-dropout.yaml --exp_name 'DeepPM+NT+dropout' --exp_override 
 
-python run_DeepPM.py --cfg config/power-deeppm-nt.yaml --exp_name 'Power+DeepPM+NT+Batch 8' --exp_override 
+# python run_DeepPM.py --cfg config/power-deeppm-nt.yaml --exp_name 'Power+DeepPM+NT+LR 0.00005' --exp_override 
 # python run_DeepPM.py --cfg config/power-deeppm-nt-vessl.yaml --exp_name 'Power+DeepPM+NT+LR 0.00003' --exp_override 
 # python run_DeepPM.py --cfg config/power-lstm-nt.yaml --exp_name 'Power+LSTM+NT+Mapex100' --exp_override 
 
 # python run_DeepPM.py --cfg config/power-deeppm.yaml --exp_name 'Power+DeepPM+Mapex100' --exp_override 
 # python run_DeepPM.py --cfg config/power-lstm.yaml --exp_name 'Power+LSTM+Mapex100' --exp_override 
+
+python run_DeepPM.py --cfg config/energy-deeppm-nt.yaml --exp_name 'Energy+DeepPM+NT' --exp_override 
+# python run_DeepPM.py --cfg config/energy-lstm-nt.yaml --exp_name 'Energy+LSTM+NT' --exp_override 

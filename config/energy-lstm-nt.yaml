@@ -37,7 +37,7 @@ train:
     using: false
     k: 5
 data:
-  data_file: training_data/i5_energy.data
+  data_file: training_data/bb_x86_energy_800_i5_231016.data
   data_setting:
     only_unique: true
     split_mode: num_instrs
