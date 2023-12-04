@@ -45,5 +45,8 @@
 # python run_DeepPM.py --cfg config/energy-deeppm-nt.yaml --exp_name 'Energy+DeepPM+NT' --exp_override 
 # python run_DeepPM.py --cfg config/energy-lstm-nt.yaml --exp_name 'Energy+LSTM+NT' --exp_override 
 
+python run_DeepPM.py --cfg config/energy-deeppm.yaml --exp_name 'Energy+DeepPM' --exp_override 
+# python run_DeepPM.py --cfg config/energy-lstm.yaml --exp_name 'Energy+LSTM' --exp_override 
+
 # python run_DeepPM.py --cfg config/model_b.yaml --exp_name 'Model B' --exp_override 
 # python run_DeepPM.py --cfg config/model_c.yaml --exp_name 'Model C' --exp_override 
